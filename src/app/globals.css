@@ -1,8 +1,257 @@
 @import "tailwindcss";
 
+/* ---------------------------------------------------------------------------
+ * Secret role card — cinematic reveal
+ * ------------------------------------------------------------------------- */
+
+
+
+
+
+
+/** Role parts settle upward into place after the flip lands. */
+@keyframes secretCardRise {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.94);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/** Emblem gets a touch more travel so it reads as landing first. */
+@keyframes secretCardEmblemPop {
+  0% {
+    opacity: 0;
+    transform: scale(0.4) rotate(-12deg);
+  }
+  60% {
+    opacity: 1;
+    transform: scale(1.12) rotate(3deg);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) rotate(0);
+  }
+}
+
+
+@keyframes secretCardFade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/*
+ * Toast entrance. Deliberately short: a toast is confirmatory feedback, and
+ * the player may be acting again within a second of the previous tap. The
+ * banner sits out of flow, so it costs the layout nothing.
+ */
+@keyframes toastIn {
+  from {
+    opacity: 0;
+    transform: translateY(-10px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/** Gentle idle shimmer on the emblem once the card has settled. */
+@keyframes secretCardEmblemShimmer {
+  0%,
+  100% {
+    filter: drop-shadow(0 0 0 transparent);
+  }
+  50% {
+    filter: drop-shadow(0 0 6px currentColor);
+  }
+}
+
+/* ---------------------------------------------------------------------------
+ * Phase transitions
+ * ------------------------------------------------------------------------- */
+
+/** Cross-fade between the outgoing and incoming phase backdrop. */
+@keyframes phaseBackdropIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/*
+ * Centered phase announcement — entrance / hold / exit.
+ *
+ * Total 4300ms, matching PHASE_ANNOUNCEMENT_STAGES in src/lib/game/phase-transition.ts:
+ *   900ms entrance  -> stop at 20.93%
+ *   2600ms hold     -> stop at 81.40%
+ *   800ms exit      -> 100%
+ * `tests/unit/phase-announcement-render.test.ts` parses this block and fails if
+ * those percentages drift from the TypeScript constants.
+ *
+ * Two properties matter for correctness:
+ *
+ * 1. NO percentage translate. The wrapper centres this element with flexbox, so
+ *    a `translate(-50%, …)` shifted it half its own width left and half its
+ *    height up. Only translateY (which moves along the already-centred axis)
+ *    and scale are used.
+ *
+ * 2. The centred, fully-opaque hold covers 60% of the sequence, so the banner
+ *    spends the overwhelming majority of its life exactly centred instead of
+ *    drifting through the whole time.
+ *
+ * Per-keyframe `animation-timing-function` gives the entrance its ease-out and
+ * the exit its ease-in without bending one curve around the hold.
+ */
+@keyframes phaseAnnouncementIn {
+  0% {
+    opacity: 0;
+    transform: translateY(18px) scale(0.94);
+    filter: blur(5px);
+    animation-timing-function: cubic-bezier(0.22, 0.61, 0.36, 1);
+  }
+  20.93% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    filter: blur(0);
+    animation-timing-function: linear;
+  }
+  81.4% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    filter: blur(0);
+    animation-timing-function: cubic-bezier(0.4, 0, 1, 1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-14px) scale(1.02);
+    filter: blur(2px);
+  }
+}
+
+/** Drifting starfield for the night backdrop. */
+@keyframes phaseStarDrift {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    transform: translate3d(-24px, 18px, 0);
+  }
+}
+
+/** Slow moonlight sweep across the night sky. */
+@keyframes phaseMoonSweep {
+  0% {
+    opacity: 0.35;
+    transform: translate3d(-6%, 0, 0) scale(1);
+  }
+  50% {
+    opacity: 0.6;
+    transform: translate3d(6%, 2%, 0) scale(1.06);
+  }
+  100% {
+    opacity: 0.35;
+    transform: translate3d(-6%, 0, 0) scale(1);
+  }
+}
+
+/** Sunrise bloom that expands through the day theme. */
+@keyframes phaseSunrise {
+  0% {
+    opacity: 0;
+    transform: translateY(14%) scale(0.94);
+  }
+  40% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0.85;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/** Game Over panel cinematic entrance. */
+@keyframes gameOverIn {
+  0% {
+    opacity: 0;
+    transform: translateY(26px) scale(0.9);
+    filter: blur(10px);
+  }
+  55% {
+    opacity: 1;
+    filter: blur(0);
+  }
+  75% {
+    transform: translateY(0) scale(1.02);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    filter: blur(0);
+  }
+}
+
+/** Faction emblem lands with weight. */
+@keyframes gameOverGlyphIn {
+  0% {
+    opacity: 0;
+    transform: scale(0.3) rotate(-16deg);
+  }
+  60% {
+    opacity: 1;
+    transform: scale(1.18) rotate(5deg);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) rotate(0);
+  }
+}
+
+/** Headline tracking widens into place. */
+@keyframes gameOverHeadlineIn {
+  from {
+    opacity: 0;
+    letter-spacing: 0.55em;
+  }
+  to {
+    opacity: 1;
+    letter-spacing: 0.18em;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+ * Reduced motion
+ *
+ * Collapses every animation and transition to a near-instant state change so
+ * the experience still works, just without movement. Components also branch on
+ * the media query to skip timers entirely (see usePrefersReducedMotion).
+ * ------------------------------------------------------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-delay: 0ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    transition-delay: 0ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #090d16;
+  --foreground: #f3f4f6;
 }
 
 @theme inline {
@@ -12,15 +261,9 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
+  min-height: 100vh;
 }

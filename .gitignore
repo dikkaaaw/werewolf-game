@@ -32,6 +32,8 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+# ...but the template is documentation and must be tracked.
+!.env.example
 
 # vercel
 .vercel
@@ -39,3 +41,14 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# supabase CLI local cache — holds project-ref, pooler-url and the linked
+# project id, i.e. infrastructure identifiers. Machine-local, never commit.
+supabase/.temp/
+
+# scratch backups
+*.bak
+
+# local overrides for scripts/supastack-local.sh (PostgREST role/password,
+# ports, state dir). Never commit: it may hold developer-specific credentials.
+.supastack.env
