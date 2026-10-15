@@ -58,6 +58,9 @@ export type RoomPlayerRow = {
   is_ready?: boolean;
   death_cause: KillCause | null;
   died_at: string | null;
+  /** Unanswered prompt, e.g. `{ type: 'hunter_final_shot' }`. */
+  prompt: Json | null;
+  prompt_deadline_at: string | null;
   joined_at: string;
   last_seen_at: string;
 }
@@ -119,6 +122,15 @@ export type GameActionResultRow = {
   created_at: string;
 }
 
+export type GameChatMessageRow = {
+  id: string;
+  room_id: string;
+  round_number: number;
+  author_player_id: string;
+  message: string;
+  created_at: string;
+}
+
 /**
  * Structural shape of the `Database` generic that `@supabase/supabase-js`
  * expects. The `Relationships` / `CompositeTypes` keys are required by the
@@ -143,6 +155,7 @@ export interface Database {
       game_votes: TableDefinition<GameVoteRow>;
       game_events: TableDefinition<GameEventRow>;
       game_action_results: TableDefinition<GameActionResultRow>;
+      game_chat_messages: TableDefinition<GameChatMessageRow>;
     };
     // Empty schema sections must use the `[_ in never]: never` mapped form,
     // NOT `Record<string, never>`. The client computes
@@ -162,6 +175,10 @@ export interface Database {
       };
       leave_room: { Args: { p_room_id: string; p_user_id: string }; Returns: Json };
       set_role_config: { Args: { p_room_id: string; p_user_id: string; p_entries: Json }; Returns: Json };
+      set_room_settings: {
+        Args: { p_room_id: string; p_user_id: string; p_phase_seconds: Json };
+        Returns: Json;
+      };
       start_game: {
         Args: {
           p_room_id: string;
@@ -232,6 +249,9 @@ export interface Database {
         Returns: Json;
       };
       run_cleanup: { Args: { p_batch_size?: number }; Returns: Json };
+      tick_room: { Args: { p_room_id: string }; Returns: Json };
+      apply_hunter_final_shot: { Args: { p_room_id: string; p_user_id: string; p_target_player_id: string }; Returns: { ok: boolean } };
+      expire_pending_hunter_final_shots: { Args: { p_room_id?: string | null }; Returns: { ok: boolean; expired: number } };
     };
     Enums: {
       player_alignment: PlayerAlignment;

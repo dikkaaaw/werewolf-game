@@ -92,7 +92,7 @@ const EMBLEMS: Record<SecretRoleEmblem, React.ReactNode> = {
             <path d="M38 15.5l1 2.6 2.6 1-2.6 1-1 2.6-1-2.6-2.6-1 2.6-1z" fill="currentColor" />
         </svg>
     ),
-    doctor: (
+    guardian_angel: (
         <svg viewBox="0 0 48 48" aria-hidden="true" className="h-full w-full">
             {/* Protective shield */}
             <path

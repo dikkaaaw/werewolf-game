@@ -32,8 +32,8 @@ const WIDTH = {
   default: 'max-w-2xl',
   wide: 'max-w-4xl',
   game: 'max-w-5xl',
-  // Three-column play layout: role card | roster | room chat.
-  gameWide: 'max-w-7xl',
+  // Three-column play layout: role card | roster | room chat (spacious & unconstrained).
+  gameWide: 'max-w-[1600px]',
 } as const;
 
 export function PhaseShell({ theme, children, width = 'default' }: PhaseShellProps) {
@@ -75,7 +75,7 @@ export function PhaseShell({ theme, children, width = 'default' }: PhaseShellPro
       />
 
       <div
-        className={`relative mx-auto w-full ${WIDTH[width]} px-4 py-5 sm:px-6 sm:py-7 ${current.text}`}
+        className={`relative mx-auto w-full ${WIDTH[width]} px-4 py-4 sm:px-6 sm:py-5 ${current.text}`}
       >
         {children}
       </div>

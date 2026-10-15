@@ -6,8 +6,10 @@ import { startGameSchema } from '@/lib/schemas/game';
 import { getDefaultRoleConfig } from '@/lib/game/default-roles';
 import { validateRoleConfig } from '@/lib/game/config-validation';
 import { assignRoles } from '@/lib/game/role-assignment';
+import { phaseSecondsFromRoomSettings } from '@/lib/game/room-settings';
 import { SETTINGS } from '@/lib/game/settings';
 import { badRequest, conflict, forbidden, notFound, ok, unauthorized } from '@/lib/server/api';
+import type { RoleConfigEntry } from '@/lib/game/types';
 
 export async function POST(
   request: Request,
@@ -78,8 +80,14 @@ export async function POST(
       return badRequest(`Cannot start game: ${unreadyPlayers.length} player(s) are not ready.`);
     }
 
-    // 5. Determine and validate role configuration
-    const requestedRoles = result.data.roles ?? getDefaultRoleConfig(playerCount);
+    // 5. Determine and validate role configuration.
+    //
+    // Precedence: an explicit request body wins (tests and the dev harness send
+    // one), then the configuration the host already saved in the lobby, and only
+    // then the balanced default. The old order was body-or-default, which threw
+    // away anything the host had configured through the settings panel and dealt
+    // a default distribution they had explicitly changed.
+    const requestedRoles = result.data.roles ?? (await loadSavedRoleConfig(admin, roomId)) ?? getDefaultRoleConfig(playerCount);
     const validation = validateRoleConfig(requestedRoles, playerCount);
 
     if (!validation.ok) {
@@ -106,8 +114,14 @@ export async function POST(
     }));
     const { assignments } = assignRoles(assignable, validation.config);
 
-    // 7. Call privileged RPC start_game
-    const nightSeconds = result.data.nightSeconds ?? 60;
+    // 7. Call privileged RPC start_game.
+    //
+    // Duration precedence: an explicit request value, then the host's saved
+    // `settings.phaseSeconds.night`, then the built-in default. A literal 60
+    // here used to override whatever the host had configured, so the first night
+    // ignored their setting even though every later phase honoured it.
+    const nightSeconds =
+      result.data.nightSeconds ?? phaseSecondsFromRoomSettings(room.settings).night;
     const { data: startData, error: startError } = await admin.rpc('start_game', {
       p_room_id: roomId,
       p_user_id: user.id,
@@ -136,4 +150,33 @@ export async function POST(
   } catch {
     return badRequest('Internal server error.');
   }
+}
+
+/**
+ * Read the composition the host saved in the lobby, or null when none exists.
+ *
+ * Only the four engine-known keys are carried through, and the rows are sorted
+ * so the resulting array is stable across calls (the assignment shuffle is
+ * seeded independently, but a deterministic input keeps the RPC payload and any
+ * audit trail comparable between attempts).
+ */
+async function loadSavedRoleConfig(
+  admin: ReturnType<typeof createAdminClient>,
+  roomId: string,
+): Promise<RoleConfigEntry[] | null> {
+  const { data: rows, error } = await admin
+    .from('room_role_configs')
+    .select('role_key, role_count')
+    .eq('room_id', roomId)
+    .order('role_key', { ascending: true });
+
+  if (error || !rows || rows.length === 0) return null;
+
+  const entries: RoleConfigEntry[] = [];
+  for (const row of rows) {
+    if (!Number.isInteger(row.role_count) || row.role_count <= 0) continue;
+    entries.push({ roleKey: row.role_key, roleCount: row.role_count, config: {} });
+  }
+
+  return entries.length > 0 ? entries : null;
 }

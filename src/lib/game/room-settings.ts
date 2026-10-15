@@ -165,15 +165,21 @@ export interface RoleCompositionInput {
   werewolf: number;
   seer: number;
   guardian_angel: number;
+  hunter?: number;
+  tanner?: number;
+  mayor?: number;
   villager: number;
 }
 
-/** Turn the four editable counts into the entry shape the validator expects. */
+/** Turn the editable counts into the entry shape the validator expects. */
 export function roleEntriesFromCounts(counts: RoleCompositionInput): RoleConfigEntry[] {
   return [
     { roleKey: 'werewolf', roleCount: counts.werewolf, config: {} },
     { roleKey: 'seer', roleCount: counts.seer, config: {} },
     { roleKey: 'guardian_angel', roleCount: counts.guardian_angel, config: {} },
+    { roleKey: 'hunter', roleCount: counts.hunter ?? 0, config: {} },
+    { roleKey: 'tanner', roleCount: counts.tanner ?? 0, config: {} },
+    { roleKey: 'mayor', roleCount: counts.mayor ?? 0, config: {} },
     { roleKey: 'villager', roleCount: counts.villager, config: {} },
   ];
 }
@@ -182,16 +188,24 @@ export function roleEntriesFromCounts(counts: RoleCompositionInput): RoleConfigE
  * Which roles are directly host-editable.
  *
  * Kept as an explicit list rather than derived from the registry so the lobby
- * UI and the settings payload agree on exactly four knobs. A role added to the
- * registry later still validates through `validateRoleConfig`; it simply is not
- * surfaced as a spinner until it is added here.
+ * UI and the settings payload agree on exactly the supported knobs. A role added
+ * to the registry later still validates through `validateRoleConfig`; it simply
+ * is not surfaced as a spinner until it is added here.
  */
-export const EDITABLE_ROLE_KEYS = ['werewolf', 'seer', 'guardian_angel', 'villager'] as const;
+export const EDITABLE_ROLE_KEYS = [
+  'werewolf',
+  'seer',
+  'guardian_angel',
+  'hunter',
+  'tanner',
+  'mayor',
+  'villager',
+] as const;
 export type EditableRoleKey = (typeof EDITABLE_ROLE_KEYS)[number];
 
 /**
  * Read a saved composition out of `room_role_configs` rows (or the snapshot
- * projection of them) into the four editable numbers, defaulting to the
+ * projection of them) into the editable numbers, defaulting to the
  * balanced distribution for the current player count when absent.
  */
 export function compositionFromCounts(
@@ -203,6 +217,9 @@ export function compositionFromCounts(
     werewolf: 0,
     seer: 0,
     guardian_angel: 0,
+    hunter: 0,
+    tanner: 0,
+    mayor: 0,
     villager: 0,
   };
 

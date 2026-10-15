@@ -23,7 +23,7 @@ export const ROLE_ARTWORK_DIR_ALT = '/assets/images/role_character';
  * Role keys that have artwork. Kept as a literal union so adding a role to the
  * registry without artwork is a compile error, not a silent fallback.
  */
-export type RoleArtworkKey = 'werewolf' | 'villager' | 'seer' | 'doctor';
+export type RoleArtworkKey = 'werewolf' | 'villager' | 'seer' | 'guardian_angel' | 'lycan' | 'hunter' | 'tanner' | 'mayor';
 
 /**
  * Artwork file for each in-engine role.
@@ -35,7 +35,11 @@ export const ROLE_CHARACTER_IMAGE: Readonly<Record<RoleArtworkKey, string>> = {
   werewolf: `${ROLE_ARTWORK_DIR}/werewolf.jpg`,
   villager: `${ROLE_ARTWORK_DIR}/villager.jpg`,
   seer: `${ROLE_ARTWORK_DIR}/seer.jpg`,
-  doctor: `${ROLE_ARTWORK_DIR}/guardian_angel.jpg`,
+  guardian_angel: `${ROLE_ARTWORK_DIR}/guardian_angel.jpg`,
+  lycan: `${ROLE_ARTWORK_DIR}/lycan.jpg`,
+  hunter: `${ROLE_ARTWORK_DIR}/hunter.jpg`,
+  tanner: `${ROLE_ARTWORK_DIR}/tanner.jpg`,
+  mayor: `${ROLE_ARTWORK_DIR}/mayor.jpg`,
 };
 
 /**
@@ -57,15 +61,12 @@ export const ROLE_ARTWORK_FILES_NOT_IN_ENGINE: readonly string[] = [
   'fool',
   'guardian_angel_is_doctor',
   'harlot',
-  'hunter',
   'lycan',
   'mason',
-  'mayor',
   'oracle',
   'prince',
   'serial_killer',
   'sorcerer',
-  'tanner',
   'thief',
   'troublemaker',
   'wolf_cub',

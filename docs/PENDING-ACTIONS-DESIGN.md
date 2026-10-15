@@ -1,4 +1,10 @@
-# Pending Game Actions Design (E2, planning only)
+# Pending Game Actions Design (E2, SUPERSEDED)
+
+> **Superseded.** The generic `game_pending_actions` framework this document
+> proposed was built in 0012 but never consumed by the game; the Hunter shipped
+> on a separate death-resolution path. Both layers are being removed in favour
+> of a per-player `prompt` with a deadline, resolved by `tick_room`. See
+> `docs/SIMPLIFICATION-PLAN.md`. This file is kept for history only.
 
 No code, migration, schema, or remote Supabase change is made by this document.
 

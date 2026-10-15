@@ -5,7 +5,7 @@
  * engine would later assume (role count sums to player count, a werewolf
  * exists, both sides can win) is proved here rather than discovered mid-game.
  */
-import { getRole, isRegisteredRole, listRoleKeys } from './role-registry';
+import { canonicalRoleKey, getRole, isRegisteredRole, listRoleKeys } from './role-registry';
 import { SETTINGS } from './settings';
 import type { RoleConfigEntry } from './types';
 
@@ -76,7 +76,8 @@ export function validateRoleConfig(
     }
 
     // 2a. Registered in the engine? An unsupported role must never be startable.
-    if (!isRegisteredRole(entry.roleKey)) {
+    const canonicalKey = canonicalRoleKey(String(entry.roleKey));
+    if (!isRegisteredRole(canonicalKey)) {
       issues.push({
         path: `${path}.roleKey`,
         message: `Unknown role "${String(entry.roleKey)}". Supported roles: ${listRoleKeys().join(', ')}.`,
@@ -85,6 +86,7 @@ export function validateRoleConfig(
     }
 
     // 2b. Non-negative integer count.
+    const roleKeyForMerge = canonicalKey;
     if (!Number.isInteger(entry.roleCount) || entry.roleCount < 0) {
       issues.push({
         path: `${path}.roleCount`,
@@ -93,14 +95,14 @@ export function validateRoleConfig(
       continue;
     }
 
-    const existing = merged.get(entry.roleKey);
+    const existing = merged.get(roleKeyForMerge);
     const config = entry.config ?? {};
     if (existing) {
       // Duplicate keys are summed rather than silently overwriting each other.
       existing.roleCount += entry.roleCount;
       existing.configs.push(config);
     } else {
-      merged.set(entry.roleKey, { roleCount: entry.roleCount, configs: [config] });
+      merged.set(roleKeyForMerge, { roleCount: entry.roleCount, configs: [config] });
     }
   }
 

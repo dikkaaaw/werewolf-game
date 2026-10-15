@@ -16,19 +16,22 @@ export interface HunterShotPromptProps {
 
 export function HunterShotPrompt({ targets, deadlineAt, submitting, onSelect }: HunterShotPromptProps) {
     const [targetId, setTargetId] = useState('')
-    const [remaining, setRemaining] = useState(Math.max(0, new Date(deadlineAt).getTime() - Date.now()))
+    const [remaining, setRemaining] = useState<number | null>(null)
 
     useEffect(() => {
-        const timer = window.setInterval(() => {
+        const update = () => {
             setRemaining(Math.max(0, new Date(deadlineAt).getTime() - Date.now()))
-        }, 250)
+        }
+        update()
+        const timer = window.setInterval(update, 250)
         return () => window.clearInterval(timer)
     }, [deadlineAt])
 
+    const expired = remaining !== null && remaining <= 0
     return (
         <section aria-live="polite">
             <p>Hunter final shot</p>
-            <p>{Math.ceil(remaining / 1000)}s</p>
+            <p>{remaining === null ? '—' : expired ? 'Expired' : `${Math.ceil(remaining / 1000)}s`}</p>
             <select value={targetId} onChange={(event) => setTargetId(event.target.value)} disabled={submitting}>
                 <option value="">Choose target</option>
                 {targets.map((target) => (
@@ -37,8 +40,8 @@ export function HunterShotPrompt({ targets, deadlineAt, submitting, onSelect }: 
             </select>
             <button
                 type="button"
-                disabled={submitting || !targetId}
-                onClick={() => onSelect(targetId)}
+                disabled={submitting || expired || !targetId}
+                onClick={() => { if (!expired) onSelect(targetId) }}
             >
                 Shoot
             </button>

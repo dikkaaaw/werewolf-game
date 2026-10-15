@@ -177,7 +177,7 @@ async function createStartedRoom(): Promise<{
       { roleKey: 'werewolf', roleCount: 1, config: {} },
       { roleKey: 'villager', roleCount: 2, config: {} },
       { roleKey: 'seer', roleCount: 1, config: {} },
-      { roleKey: 'doctor', roleCount: 1, config: {} },
+      { roleKey: 'guardian_angel', roleCount: 1, config: {} },
     ],
     nightSeconds: 600,
   });
@@ -267,7 +267,7 @@ suite('e2e: HTTP game loop through the real route handlers', () => {
         { roleKey: 'werewolf', roleCount: 1, config: {} },
         { roleKey: 'villager', roleCount: 2, config: {} },
         { roleKey: 'seer', roleCount: 1, config: {} },
-        { roleKey: 'doctor', roleCount: 1, config: {} },
+        { roleKey: 'guardian_angel', roleCount: 1, config: {} },
       ],
       nightSeconds: 600,
     });
@@ -286,7 +286,7 @@ suite('e2e: HTTP game loop through the real route handlers', () => {
     const everyone = [host, ...others];
     expect(everyone).toHaveLength(5);
     const roles = everyone.map((a) => a.roleKey).sort();
-    expect(roles).toEqual(['doctor', 'seer', 'villager', 'villager', 'werewolf']);
+    expect(roles).toEqual(['guardian_angel', 'seer', 'villager', 'villager', 'werewolf']);
     for (const actor of everyone) expect(actor.playerId).toBeTruthy();
   });
 
@@ -299,7 +299,7 @@ suite('e2e: HTTP game loop through the real route handlers', () => {
 
       // No role key may appear as a VALUE while the game is running: every
       // player is alive here, so revealedRole must be null for all of them.
-      for (const role of ['werewolf', 'seer', 'doctor', 'villager']) {
+      for (const role of ['werewolf', 'seer', 'guardian_angel', 'villager']) {
         expect(serialised, 'snapshot leaked a role key').not.toContain(`"${role}"`);
       }
       // No private tables / columns beyond the single permitted reveal field.
@@ -349,7 +349,7 @@ suite('e2e: HTTP game loop through the real route handlers', () => {
     const werewolf = everyone.find((a) => a.roleKey === 'werewolf')!;
     const villager = everyone.find((a) => a.roleKey === 'villager')!;
     const seer = everyone.find((a) => a.roleKey === 'seer')!;
-    const doctor = everyone.find((a) => a.roleKey === 'doctor')!;
+    const doctor = everyone.find((a) => a.roleKey === 'guardian_angel')!;
 
     const victim = villager.playerId;
 
@@ -546,7 +546,7 @@ suite('e2e: HTTP game loop through the real route handlers', () => {
   it('9c. an eliminated player is revealed mid-game, living players are not', async () => {
     const { roomId: revealRoom, actors } = await createStartedRoom();
     const werewolf = actors.find((a) => a.roleKey === 'werewolf')!;
-    const doctor = actors.find((a) => a.roleKey === 'doctor')!;
+    const doctor = actors.find((a) => a.roleKey === 'guardian_angel')!;
     const seer = actors.find((a) => a.roleKey === 'seer')!;
 
     // Two villagers exist. The werewolf will kill ONE of them; call that player
@@ -860,11 +860,15 @@ suite('e2e: HTTP game loop through the real route handlers', () => {
     expect(before.data!.phase).toBe('night');
 
     // A member submits an action; that is the documented advancement trigger.
-    const res = await api(liveActors[1].cookie, `/api/rooms/${liveRoom}/actions`, 'POST', {
+    const seer = liveActors.find((a) => a.roleKey === 'seer')!;
+    const res = await api(seer.cookie, `/api/rooms/${liveRoom}/actions`, 'POST', {
       actionType: 'investigate',
-      targetPlayerId: liveActors[0].playerId,
+      targetPlayerId: liveActors.find((a) => a.playerId !== seer.playerId)!.playerId,
     });
-    expect(res.status).toBe(200);
+    // The request that triggers lazy advancement is judged against the
+    // authoritative post-advance state: night is over, so the night action is
+    // rejected with 409. The important guarantee is that the phase moved.
+    expect(res.status).toBe(409);
 
     const after = await admin
       .from('rooms')

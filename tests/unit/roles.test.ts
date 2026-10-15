@@ -26,7 +26,7 @@ const players = (n: number) =>
 
 describe('role registry', () => {
   it('registers exactly the MVP roles', () => {
-    expect(listRoleKeys().sort()).toEqual(['doctor', 'seer', 'villager', 'werewolf']);
+    expect(listRoleKeys().sort()).toEqual(['guardian_angel', 'hunter', 'lycan', 'mayor', 'seer', 'tanner', 'villager', 'werewolf']);
   });
 
   it('every role has the full definition the PRD requires', () => {
@@ -55,16 +55,16 @@ describe('role registry', () => {
   it('maps capabilities to the right actions', () => {
     expect(roleSupportsAction('werewolf', 'eliminate')).toBe(true);
     expect(roleSupportsAction('seer', 'investigate')).toBe(true);
-    expect(roleSupportsAction('doctor', 'protect')).toBe(true);
+    expect(roleSupportsAction('guardian_angel', 'protect')).toBe(true);
     // No role may perform an action that is not its own.
     expect(roleSupportsAction('villager', 'eliminate')).toBe(false);
     expect(roleSupportsAction('seer', 'protect')).toBe(false);
     expect(roleSupportsAction('werewolf', 'investigate')).toBe(false);
-    expect(roleSupportsAction('doctor', 'eliminate')).toBe(false);
+    expect(roleSupportsAction('guardian_angel', 'eliminate')).toBe(false);
   });
 
   it('resolves protection above elimination in priority', () => {
-    const doctor = requireRole('doctor');
+    const doctor = requireRole('guardian_angel');
     const werewolf = requireRole('werewolf');
     expect(doctor.actionPriority!).toBeGreaterThan(werewolf.actionPriority!);
   });
@@ -76,12 +76,12 @@ describe('role assignment', () => {
       { roleKey: 'werewolf', roleCount: 2, config: {} },
       { roleKey: 'villager', roleCount: 3, config: {} },
       { roleKey: 'seer', roleCount: 1, config: {} },
-      { roleKey: 'doctor', roleCount: 1, config: {} },
+      { roleKey: 'guardian_angel', roleCount: 1, config: {} },
     ];
     const result = assignRoles(players(7), config, seededRng());
 
     expect(result.assignments).toHaveLength(7);
-    expect(result.dealt).toEqual({ werewolf: 2, villager: 3, seer: 1, doctor: 1 });
+    expect(result.dealt).toEqual({ werewolf: 2, villager: 3, seer: 1, guardian_angel: 1 });
   });
 
   it('assigns every player exactly one role, with the right alignment', () => {
@@ -89,7 +89,7 @@ describe('role assignment', () => {
       { roleKey: 'werewolf', roleCount: 2, config: {} },
       { roleKey: 'villager', roleCount: 3, config: {} },
       { roleKey: 'seer', roleCount: 1, config: {} },
-      { roleKey: 'doctor', roleCount: 1, config: {} },
+      { roleKey: 'guardian_angel', roleCount: 1, config: {} },
     ];
     const { assignments } = assignRoles(players(7), config, seededRng());
 
@@ -170,7 +170,7 @@ describe('validateRoleConfig', () => {
     { roleKey: 'werewolf', roleCount: 2, config: {} },
     { roleKey: 'villager', roleCount: 3, config: {} },
     { roleKey: 'seer', roleCount: 1, config: {} },
-    { roleKey: 'doctor', roleCount: 1, config: {} },
+    { roleKey: 'guardian_angel', roleCount: 1, config: {} },
   ];
 
   it('accepts a well-formed configuration', () => {
@@ -342,7 +342,7 @@ describe('validateRoleConfig', () => {
       [
         { roleKey: 'werewolf', roleCount: 1, config: {} },
         { roleKey: 'seer', roleCount: 1, config: {} },
-        { roleKey: 'doctor', roleCount: 1, config: {} },
+        { roleKey: 'guardian_angel', roleCount: 1, config: {} },
         { roleKey: 'villager', roleCount: 2, config: {} },
       ],
       5,
@@ -372,7 +372,7 @@ describe('validateRoleConfig', () => {
       [
         { roleKey: 'werewolf', roleCount: 1, config: {} },
         { roleKey: 'seer', roleCount: 1, config: {} },
-        { roleKey: 'doctor', roleCount: 1, config: {} },
+        { roleKey: 'guardian_angel', roleCount: 1, config: {} },
         { roleKey: 'villager', roleCount: 2, config: {} },
       ],
       5,
@@ -390,7 +390,7 @@ describe('validateRoleConfig', () => {
       [
         { roleKey: 'werewolf', roleCount: 1, config: {} },
         { roleKey: 'seer', roleCount: 1, config: {} },
-        { roleKey: 'doctor', roleCount: 1, config: {} },
+        { roleKey: 'guardian_angel', roleCount: 1, config: {} },
         { roleKey: 'villager', roleCount: 3, config: {} },
       ],
       6,
@@ -419,7 +419,7 @@ describe('validateRoleConfig', () => {
     expect(getDefaultRoleConfig(5)).toEqual([
       { roleKey: 'werewolf', roleCount: 1, config: {} },
       { roleKey: 'seer', roleCount: 1, config: {} },
-      { roleKey: 'doctor', roleCount: 1, config: {} },
+      { roleKey: 'guardian_angel', roleCount: 1, config: {} },
       { roleKey: 'villager', roleCount: 2, config: {} },
     ]);
   });

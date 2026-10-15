@@ -28,6 +28,9 @@ const ROLE_LABELS: Record<EditableRoleKey, string> = {
     werewolf: 'Werewolves',
     seer: 'Seers',
     guardian_angel: 'Guardian Angels',
+    hunter: 'Hunters',
+    tanner: 'Tanners',
+    mayor: 'Mayors',
     villager: 'Villagers',
 }
 
@@ -88,6 +91,9 @@ export function LobbySettings({ theme, room, isHost, busyKey, onSave, defaultExp
             werewolf: 'Werewolf',
             seer: 'Seer',
             guardian_angel: 'Guardian Angel',
+            hunter: 'Hunter',
+            tanner: 'Tanner',
+            mayor: 'Mayor',
             villager: 'Villager',
         };
         const parts: string[] = [];
@@ -245,7 +251,7 @@ export function LobbySettings({ theme, room, isHost, busyKey, onSave, defaultExp
                 <legend className={`text-[10px] font-bold uppercase tracking-[0.18em] ${theme.eyebrow}`}>
                     Roles
                 </legend>
-                <div className="mt-2.5 grid grid-cols-2 gap-2.5 sm:grid-cols-4">
+                <div className="mt-2.5 grid grid-cols-2 gap-2.5 sm:grid-cols-6">
                     {EDITABLE_ROLE_KEYS.map((key) => (
                         <label key={key} className="flex flex-col gap-1">
                             <span className={`text-xs font-semibold ${theme.text}`}>
@@ -321,9 +327,6 @@ export function LobbySettings({ theme, room, isHost, busyKey, onSave, defaultExp
                         'Save settings'
                     )}
                 </button>
-                <p className={`text-[11px] ${theme.textFaint}`}>
-                    Locked once the game starts. Everyone in the lobby sees the saved values.
-                </p>
             </div>
             )}
 

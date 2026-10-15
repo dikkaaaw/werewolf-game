@@ -16,7 +16,7 @@ export type GamePhase = (typeof GAME_PHASES)[number];
 export const NIGHT_ACTION_TYPES = ['eliminate', 'investigate', 'protect'] as const;
 export type NightActionType = (typeof NIGHT_ACTION_TYPES)[number];
 
-export const KILL_CAUSES = ['night_elimination', 'vote_elimination'] as const;
+export const KILL_CAUSES = ['night_elimination', 'vote_elimination', 'hunter_shot'] as const;
 export type KillCause = (typeof KILL_CAUSES)[number];
 
 export const VOTE_TIE_RULES = ['none', 'random'] as const;

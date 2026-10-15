@@ -69,7 +69,7 @@ export function PlayerRoster({
     myRoleKey === 'werewolf' ? 'eliminate' : myRoleKey === 'seer' ? 'investigate' : 'protect'
 
   const canActAtNight = Boolean(
-    isNight && !hasActedThisRound && ['werewolf', 'seer', 'doctor'].includes(myRoleKey ?? ''),
+    isNight && !hasActedThisRound && ['werewolf', 'seer', 'guardian_angel'].includes(myRoleKey ?? ''),
   )
 
   const living = room.players.filter((p) => p.isAlive).length
@@ -191,11 +191,15 @@ export function PlayerRoster({
               </div>
 
               <div className="flex shrink-0 items-center gap-2">
-                {isNight && rowActionable && (
+                {isNight && (rowActionable || isNightTarget) && (
                   <button
                     type="button"
-                    onClick={isNightTarget ? undefined : () => onNightAction(player.id, nightActionType)}
-                    disabled={actionLoading !== null || isNightTarget}
+                    onClick={
+                      isNightTarget || hasActedThisRound || actionLoading !== null
+                        ? undefined
+                        : () => onNightAction(player.id, nightActionType)
+                    }
+                    disabled={actionLoading !== null || isNightTarget || hasActedThisRound}
                     className={`rounded-lg border px-3 py-1.5 text-xs font-bold transition disabled:opacity-40 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 motion-reduce:transition-none ${
                       isNightTarget ? theme.buttonPrimary : theme.buttonNeutral
                     }`}

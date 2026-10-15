@@ -3,6 +3,7 @@ import 'server-only';
 import { createAdminClient, createServerClient } from '@/lib/supabase/server';
 import { isRoleRevealed } from '@/lib/game/reveal';
 import { isRegisteredRole } from '@/lib/game/role-registry';
+import { phaseSecondsFromRoomSettings } from '@/lib/game/room-settings';
 import { ok, notFound, tooManyRequests, unauthorized } from '@/lib/server/api';
 import { advanceRoomPhaseIfExpired } from '@/lib/server/phase-advancement';
 import { checkRateLimit } from '@/lib/server/rate-limit';
@@ -43,30 +44,27 @@ export async function GET(
    * work, and its 404 does not disclose whether the room exists.
    */
   const readRoomState = async () => {
-    const { data: room, error: roomError } = await supabase
-      .from('rooms')
-      .select(
-        'id, room_code, status, phase, round_number, phase_ends_at, max_players, host_user_id, expires_at, state_version, created_at, updated_at, settings',
-      )
-      .eq('id', roomId)
-      .single();
+    const [roomResult, playersResult] = await Promise.all([
+      supabase
+        .from('rooms')
+        .select(
+          'id, room_code, status, phase, round_number, phase_ends_at, max_players, host_user_id, expires_at, state_version, created_at, updated_at, settings',
+        )
+        .eq('id', roomId)
+        .single(),
+      supabase
+        .from('room_players')
+        .select(
+          'id, user_id, display_name, seat_number, is_alive, is_ready, death_cause, died_at, joined_at, last_seen_at',
+        )
+        .eq('room_id', roomId),
+    ]);
 
-    if (roomError || !room) {
+    if (roomResult.error || !roomResult.data || playersResult.error) {
       return null;
     }
 
-    const { data: players, error: playersError } = await supabase
-      .from('room_players')
-      .select(
-        'id, user_id, display_name, seat_number, is_alive, is_ready, death_cause, died_at, joined_at, last_seen_at',
-      )
-      .eq('room_id', roomId);
-
-    if (playersError) {
-      return null;
-    }
-
-    return { room, players: (players ?? []) as RoomPlayerRow[] };
+    return { room: roomResult.data, players: (playersResult.data ?? []) as RoomPlayerRow[] };
   };
 
   const initial = await readRoomState();
@@ -81,52 +79,61 @@ export async function GET(
   // resolve -> commit/finish, all with the service role), so an unauthenticated
   // or non-member caller must never be able to reach it — otherwise any HTTP
   // client that learned a room id could drive the game state machine.
-  await advanceRoomPhaseIfExpired(roomId);
-
-  // Re-read after advancement: the phase may have moved (and players may have
-  // been eliminated), so the snapshot must describe the state that resulted
-  // rather than the one observed before the transition.
-  const advanced = await readRoomState();
+  //
+  // It returns true ONLY when a transition actually settled. The unconditional
+  // re-read that used to follow cost a second room+roster round trip on every
+  // single poll, and in a 15-second heartbeat world that is the majority of the
+  // snapshot's database cost for a phase that has not expired yet.
+  const advanced = (await advanceRoomPhaseIfExpired(roomId))
+    ? await readRoomState()
+    : null;
   const room = advanced?.room ?? initial.room;
   const typedPlayers = advanced?.players ?? initial.players;
 
-  // If voting phase, fetch public votes for this round (RLS game_votes_member_read applies)
-  let votes: Array<{ voter_player_id: string; target_player_id: string }> = [];
-  if (room.phase === 'voting') {
-    const { data: voteRows } = await supabase
-      .from('game_votes')
-      .select('voter_player_id, target_player_id')
-      .eq('room_id', roomId)
-      .eq('round_number', room.round_number);
-    votes = voteRows ?? [];
-  }
-
-  // --- Role reveal ------------------------------------------------------------
-  // Read with the SERVICE ROLE, exactly like `my-role` does, and only AFTER the
-  // session user is authenticated and the RLS-protected room read above has
-  // confirmed they are a member of this room.
-  //
-  // It must be the service role: `player_secrets` deliberately has ZERO RLS
-  // policies, so the caller's own session client reads nothing at all and every
-  // revealedRole would come back null.
-  //
-  // Two things keep this safe:
-  //   * it is scoped to `player_id in (this room's roster ids)` — never a
-  //     whole-table read, and structurally unable to reach another room; and
-  //   * only `role_key` is selected. Alignment, private_state and Seer results
-  //     are never fetched, so they cannot leak through this path even if the
-  //     reveal rule were wrong.
+  // Execute supplementary parallel reads based on room state
+  const isLobbySnapshot = room.status === 'lobby';
   const rosterIds = typedPlayers.map((p) => p.id);
-  const secretsByPlayer = new Map<string, string>();
-  if (rosterIds.length > 0) {
-    const { data: secrets } = await createAdminClient()
-      .from('player_secrets')
-      .select('player_id, role_key')
-      .in('player_id', rosterIds);
+  const anyRevealable = room.status === 'finished' || typedPlayers.some((p) => !p.is_alive);
 
-    for (const secret of secrets ?? []) {
-      secretsByPlayer.set(secret.player_id, secret.role_key);
-    }
+  const [voteRowsRes, eventRowsRes, secretsRes, roleRowsRes] = await Promise.all([
+    room.phase === 'voting'
+      ? supabase
+          .from('game_votes')
+          .select('voter_player_id, target_player_id')
+          .eq('room_id', roomId)
+          .eq('round_number', room.round_number)
+      : Promise.resolve({ data: [] }),
+
+    room.status !== 'lobby'
+      ? supabase
+          .from('game_events')
+          .select('id, event_type, public_payload, round_number, created_at')
+          .eq('room_id', roomId)
+          .order('id', { ascending: true })
+          .limit(50)
+      : Promise.resolve({ data: [] }),
+
+    anyRevealable && rosterIds.length > 0
+      ? createAdminClient()
+          .from('player_secrets')
+          .select('player_id, role_key')
+          .in('player_id', rosterIds)
+      : Promise.resolve({ data: [] }),
+
+    isLobbySnapshot
+      ? supabase
+          .from('room_role_configs')
+          .select('role_key, role_count')
+          .eq('room_id', roomId)
+      : Promise.resolve({ data: [] }),
+  ]);
+
+  const votes = (voteRowsRes.data ?? []) as Array<{ voter_player_id: string; target_player_id: string }>;
+  const events = (eventRowsRes.data ?? []) as Array<{ id: number; event_type: string; public_payload: unknown; round_number: number | null; created_at: string }>;
+
+  const secretsByPlayer = new Map<string, string>();
+  for (const secret of secretsRes.data ?? []) {
+    secretsByPlayer.set(secret.player_id, secret.role_key);
   }
 
   const revealSetting = (room.settings as Record<string, unknown> | null)
@@ -159,6 +166,18 @@ export async function GET(
   };
   const currentPlayers = typedPlayers.filter((p) => p.is_alive).length;
 
+  const phaseSeconds = isLobbySnapshot
+    ? phaseSecondsFromRoomSettings(room.settings)
+    : null;
+  const roleCounts: Record<string, number> | null = isLobbySnapshot
+    ? Object.fromEntries(
+        (roleRowsRes.data ?? []).map((r: { role_key: string; role_count: number }) => [
+          r.role_key,
+          r.role_count,
+        ]),
+      )
+    : null;
+
   // Only return data the lobby UI needs. No private role data, secrets, night actions, or audit logs.
   const safeRoom = {
     id: room.id,
@@ -175,7 +194,16 @@ export async function GET(
     createdAt: room.created_at,
     updatedAt: room.updated_at,
     winner: (room.settings as Record<string, unknown>)?.winner as string | undefined,
+    phaseSeconds,
+    roleCounts,
     votes: votes.map((v) => ({ voterPlayerId: v.voter_player_id, targetPlayerId: v.target_player_id })),
+    events: events.map((e) => ({
+      id: e.id,
+      eventType: e.event_type,
+      publicPayload: (e.public_payload as Record<string, unknown>) ?? {},
+      roundNumber: e.round_number,
+      createdAt: e.created_at,
+    })),
     players: typedPlayers.map((p) => ({
       id: p.id,
       userId: p.user_id,

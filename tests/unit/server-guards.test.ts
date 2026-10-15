@@ -91,6 +91,7 @@ describe('Snapshot route — rate limiting', () => {
         settings: {},
       }),
       room_players: row([]),
+      room_role_configs: row([]),
     };
     sessionTables = tables;
   }

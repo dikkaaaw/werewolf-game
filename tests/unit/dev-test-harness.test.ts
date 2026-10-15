@@ -72,7 +72,7 @@ describe('Development Test Harness: minimum-five simulation scenarios', () => {
     expect(defaultRoles).toEqual([
       { roleKey: 'werewolf', roleCount: 1, config: {} },
       { roleKey: 'seer', roleCount: 1, config: {} },
-      { roleKey: 'doctor', roleCount: 1, config: {} },
+      { roleKey: 'guardian_angel', roleCount: 1, config: {} },
       { roleKey: 'villager', roleCount: 2, config: {} },
     ]);
 
@@ -80,7 +80,7 @@ describe('Development Test Harness: minimum-five simulation scenarios', () => {
     expect(assignments).toHaveLength(5);
     expect(dealt['werewolf']).toBe(1);
     expect(dealt['seer']).toBe(1);
-    expect(dealt['doctor']).toBe(1);
+    expect(dealt['guardian_angel']).toBe(1);
     expect(dealt['villager']).toBe(2);
 
     // Pastikan setiap pemain mendapat tepat 1 assignment unik

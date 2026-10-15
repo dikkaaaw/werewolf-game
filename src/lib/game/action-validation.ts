@@ -1,3 +1,4 @@
+import { canonicalRoleKey, getRole } from './role-registry';
 /**
  * Night action validation.
  *
@@ -9,7 +10,6 @@
  * then role capability, then target legality. This keeps error messages
  * specific without leaking information a player is not entitled to.
  */
-import { getRole } from './role-registry';
 import type { GamePhase, NightActionType, PlayerState } from './types';
 
 export type ActionRejectionCode =
@@ -24,6 +24,7 @@ export type ActionRejectionCode =
   | 'target_is_self'
   | 'target_dead'
   | 'same_role_target_forbidden'
+  | 'target_is_werewolf'
   | 'repeat_target_forbidden';
 
 export type ActionValidationResult =
@@ -99,22 +100,25 @@ export function validateNightAction(input: ActionValidationInput): ActionValidat
     return fail('target_dead', 'That player has already been eliminated.');
   }
 
-  // A1/A2: a Werewolf may not eliminate another Werewolf and a Doctor may not
-  // protect another Doctor. `target.roleKey` comes from the trusted roster, and
-  // the check is skipped when the target has no role (nothing to compare), which
-  // fails open for a targeting restriction — the authoritative SQL RPC enforces
-  // the same rule against `player_secrets`.
+  // A1/A2: a Werewolf may not eliminate another Werewolf and a Guardian Angel
+  // may not protect another Guardian Angel. `target.roleKey` comes from the
+  // trusted roster. A Lycan is also wolf-aligned, so wolves cannot target one.
   if (
     !role.targetRules.canTargetSameRole &&
     target.roleKey &&
-    target.roleKey === actor.roleKey
+    canonicalRoleKey(target.roleKey) === canonicalRoleKey(actor.roleKey)
   ) {
+
     return fail(
       'same_role_target_forbidden',
       role.roleKey === 'werewolf'
         ? 'Werewolves cannot target another Werewolf.'
-        : 'A Doctor cannot protect another Doctor.',
+        : 'A Guardian Angel cannot protect another Guardian Angel.',
     );
+  }
+
+  if (role.roleKey === 'werewolf' && target.alignment === 'werewolf') {
+    return fail('target_is_werewolf', 'Werewolves cannot target another Wolf.');
   }
 
   if (role.targetRules.forbidRepeatTarget && previousTargetPlayerId === target.playerId) {

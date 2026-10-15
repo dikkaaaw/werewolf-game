@@ -150,7 +150,7 @@ suite('integration: full game loop against Postgres', () => {
       { roleKey: 'werewolf', roleCount: 2, config: {} },
       { roleKey: 'villager', roleCount: 3, config: {} },
       { roleKey: 'seer', roleCount: 1, config: {} },
-      { roleKey: 'doctor', roleCount: 1, config: {} },
+      { roleKey: 'guardian_angel', roleCount: 1, config: {} },
     ];
 
     const validation = validateRoleConfig(config, playerIds.length);
@@ -213,7 +213,7 @@ suite('integration: full game loop against Postgres', () => {
     expect(secrets).toHaveLength(7);
 
     for (const secret of secrets!) {
-      expect(['werewolf', 'villager', 'seer', 'doctor']).toContain(secret.role_key);
+      expect(['werewolf', 'villager', 'seer', 'guardian_angel']).toContain(secret.role_key);
     }
     expect(secrets!.filter((s) => s.role_key === 'werewolf')).toHaveLength(2);
     expect(secrets!.filter((s) => s.role_key === 'seer')).toHaveLength(1);
@@ -235,7 +235,9 @@ suite('integration: full game loop against Postgres', () => {
   it('accepts a valid night action and rejects an invalid one', async () => {
     const werewolf = assignments.find((a) => a.role_key === 'werewolf')!;
     const villager = assignments.find((a) => a.role_key === 'villager')!;
-    const target = assignments.find((a) => a.player_id !== werewolf.player_id)!;
+    const target = assignments.find(
+      (a) => a.player_id !== werewolf.player_id && a.role_key !== 'werewolf',
+    )!;
 
     const wasserUserId = userIdForPlayer(werewolf.player_id);
     const villagerUserId = userIdForPlayer(villager.player_id);
@@ -246,7 +248,8 @@ suite('integration: full game loop against Postgres', () => {
       p_action_type: 'eliminate',
       p_target_player_id: target.player_id,
     });
-    expect((accepted.data as { ok: boolean }).ok).toBe(true);
+    const acceptedBody = accepted.data as { ok: boolean; error?: { message: string } };
+    expect(acceptedBody.ok, acceptedBody.error?.message).toBe(true);
 
     const rejected = await admin.rpc('submit_night_action', {
       p_room_id: roomId,
@@ -261,15 +264,17 @@ suite('integration: full game loop against Postgres', () => {
     const werewolf = assignments.find((a) => a.role_key === 'werewolf')!;
     const userId = userIdForPlayer(werewolf.player_id);
     const newTarget = assignments.find(
-      (a) => a.player_id !== werewolf.player_id && a.role_key !== 'villager',
+      (a) => a.player_id !== werewolf.player_id && a.role_key !== 'werewolf',
     )!;
 
-    await admin.rpc('submit_night_action', {
+    const submitted = await admin.rpc('submit_night_action', {
       p_room_id: roomId,
       p_user_id: userId,
       p_action_type: 'eliminate',
       p_target_player_id: newTarget.player_id,
     });
+    const body = submitted.data as { ok: boolean; error?: { message: string } };
+    expect(body.ok, body.error?.message).toBe(true);
 
     const { data: actions } = await admin
       .from('game_actions')
@@ -290,10 +295,14 @@ suite('integration: full game loop against Postgres', () => {
       .eq('room_id', roomId)
       .eq('round_number', 1);
 
-    const { data: secrets } = await admin.from('player_secrets').select('*');
     const { data: roster } = await admin
       .from('room_players')
-      .select('id, seat_number, display_name, is_alive');
+      .select('id, seat_number, display_name, is_alive')
+      .eq('room_id', roomId);
+    const { data: secrets } = await admin
+      .from('player_secrets')
+      .select('player_id, role_key, alignment')
+      .in('player_id', (roster ?? []).map((r) => r.id));
 
     const states: PlayerState[] = roster!.map((r) => {
       const secret = secrets!.find((s) => s.player_id === r.id)!;
@@ -415,8 +424,14 @@ suite('integration: full game loop against Postgres', () => {
   });
 
   it('computes a win condition from live database state', async () => {
-    const { data: roster } = await admin.from('room_players').select('id, is_alive, seat_number');
-    const { data: secrets } = await admin.from('player_secrets').select('player_id, alignment');
+    const { data: roster } = await admin
+      .from('room_players')
+      .select('id, is_alive, seat_number')
+      .eq('room_id', roomId);
+    const { data: secrets } = await admin
+      .from('player_secrets')
+      .select('player_id, alignment')
+      .in('player_id', (roster ?? []).map((r) => r.id));
 
     const result = evaluateWinCondition(
       roster!.map((r) => ({

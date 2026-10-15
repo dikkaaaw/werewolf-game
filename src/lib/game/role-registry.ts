@@ -106,9 +106,9 @@ const seer: RoleDefinition = {
     configSchema: emptyConfigSchema,
 }
 
-const doctor: RoleDefinition = {
-    roleKey: 'doctor',
-    displayName: 'Doctor',
+const guardianAngel: RoleDefinition = {
+    roleKey: 'guardian_angel',
+    displayName: 'Guardian Angel',
     description:
         'Each night, protect one player. A protected player survives that night’s elimination.',
     alignment: 'village',
@@ -142,27 +142,114 @@ const doctor: RoleDefinition = {
     configSchema: emptyConfigSchema,
 }
 
-const ROLES: readonly RoleDefinition[] = [werewolf, villager, seer, doctor]
+
+
+const lycan: RoleDefinition = {
+    roleKey: 'lycan',
+    displayName: 'Lycan',
+    description:
+        'A wolf-team member with no night action. To the Seer, the Lycan nevertheless reads as a Villager.',
+    alignment: 'werewolf',
+    nightAction: null,
+    actionPriority: null,
+    targetRules: {
+        canTargetSelf: false,
+        canTargetDead: false,
+        forbidRepeatTarget: false,
+        canTargetSameRole: true,
+    },
+    countsForWinAs: 'werewolf',
+    configSchema: emptyConfigSchema,
+}
+
+const hunter: RoleDefinition = {
+    roleKey: 'hunter',
+    displayName: 'Hunter',
+    description:
+        'No night action. Upon death, the Hunter may choose an alive player to eliminate.',
+    alignment: 'village',
+    nightAction: null,
+    actionPriority: null,
+    targetRules: {
+        canTargetSelf: false,
+        canTargetDead: true,
+        forbidRepeatTarget: false,
+        canTargetSameRole: true,
+    },
+    countsForWinAs: 'village',
+    configSchema: emptyConfigSchema,
+}
+
+const tanner: RoleDefinition = {
+    roleKey: 'tanner',
+    displayName: 'Tanner',
+    description:
+        'Hates life and wants to die. If the Tanner is lynched during the day, the Tanner wins the game alone.',
+    alignment: 'neutral',
+    nightAction: null,
+    actionPriority: null,
+    targetRules: {
+        canTargetSelf: false,
+        canTargetDead: false,
+        forbidRepeatTarget: false,
+        canTargetSameRole: true,
+    },
+    countsForWinAs: 'neutral',
+    configSchema: emptyConfigSchema,
+}
+
+const mayor: RoleDefinition = {
+    roleKey: 'mayor',
+    displayName: 'Mayor',
+    description:
+        'A powerful village leader. Once the Mayor reveals themselves, their vote counts as two votes in every lynching.',
+    alignment: 'village',
+    nightAction: null,
+    actionPriority: null,
+    targetRules: {
+        canTargetSelf: false,
+        canTargetDead: false,
+        forbidRepeatTarget: false,
+        canTargetSameRole: true,
+    },
+    countsForWinAs: 'village',
+    configSchema: emptyConfigSchema,
+}
+
+const ROLES: readonly RoleDefinition[] = [werewolf, villager, seer, guardianAngel, lycan, hunter, tanner, mayor]
 
 const ROLE_MAP: ReadonlyMap<string, RoleDefinition> = new Map(
     ROLES.map((role) => [role.roleKey, role])
 )
 
 export function getRole(roleKey: string): RoleDefinition | undefined {
-    return ROLE_MAP.get(roleKey)
+    return ROLE_MAP.get(canonicalRoleKey(roleKey))
 }
 
 /** Throws if the role is unknown — use where the role is already known-valid. */
 export function requireRole(roleKey: string): RoleDefinition {
-    const role = ROLE_MAP.get(roleKey)
+    const role = ROLE_MAP.get(canonicalRoleKey(roleKey))
     if (!role) {
         throw new Error(`Unknown role key: ${roleKey}`)
     }
     return role
 }
 
+
+const ROLE_ALIASES: Record<string, string> = {
+    // Compatibility: saved role configurations created before the Doctor ->
+    // Guardian Angel replacement may still carry `doctor`. Treat it as the
+    // current role rather than rejecting the persisted row outright.
+    doctor: 'guardian_angel',
+};
+
+/** Normalise a legacy role key to the current active role key. */
+export function canonicalRoleKey(roleKey: string): string {
+    return ROLE_ALIASES[roleKey] ?? roleKey;
+}
+
 export function isRegisteredRole(roleKey: string): boolean {
-    return ROLE_MAP.has(roleKey)
+    return ROLE_MAP.has(canonicalRoleKey(roleKey)) || Object.prototype.hasOwnProperty.call(ROLE_ALIASES, roleKey)
 }
 
 export function listRoles(): readonly RoleDefinition[] {
@@ -175,6 +262,6 @@ export function listRoleKeys(): string[] {
 
 /** True when the role may submit `actionType` at night. */
 export function roleSupportsAction(roleKey: string, actionType: string): boolean {
-    const role = ROLE_MAP.get(roleKey)
+    const role = ROLE_MAP.get(canonicalRoleKey(roleKey))
     return Boolean(role && role.nightAction === actionType)
 }

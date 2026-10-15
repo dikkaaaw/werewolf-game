@@ -33,11 +33,18 @@ export const SETTINGS = {
         voting: 10,
     },
 
-    /** Bounds a room's custom phase durations are validated against. */
+    /**
+     * Bounds a room's custom phase durations are validated against.
+     *
+     * `min` deliberately equals the matching `phaseSeconds` default above.
+     * When it did not (15 vs a 10-second default) the built-in default was
+     * itself out of range, so a host who saved "the current values" was
+     * rejected and there was no valid value below the floor to fall back on.
+     */
     phaseSecondsBounds: {
-        night: { min: 15, max: 300 },
-        day: { min: 15, max: 600 },
-        voting: { min: 15, max: 300 },
+        night: { min: 10, max: 300 },
+        day: { min: 10, max: 600 },
+        voting: { min: 10, max: 300 },
     },
 
     /**
@@ -81,11 +88,21 @@ export const SETTINGS = {
         submitVote: { limit: 10, windowSeconds: 60 },
         roomSnapshot: { limit: 60, windowSeconds: 60 },
         /**
+         * Sending in-game room chat messages. Active during day/voting phases for living players.
+         */
+        sendChat: { limit: 20, windowSeconds: 60 },
+        /**
          * Reading your own secret. The game page fetches this alongside every
-         * snapshot poll (the in-game client heartbeats every 4s = 15/min), so the
+         * snapshot poll (the in-game client heartbeats every 15s = 4/min), so the
          * budget matches `roomSnapshot` rather than the tighter mutation budgets.
          */
         myRole: { limit: 60, windowSeconds: 60 },
+        /**
+         * Saving lobby game settings. Host-only and lobby-only, so the volume is
+         * naturally tiny; the limit exists to stop a misbehaving client from
+         * hammering the RPC, not to throttle a real host.
+         */
+        updateSettings: { limit: 30, windowSeconds: 60 },
     },
 
     concurrency: {

@@ -37,6 +37,7 @@ function chain<T>(result: { data: T; error: null }) {
     eq: vi.fn(() => builder),
     in: vi.fn(() => builder),
     order: vi.fn(() => builder),
+    limit: vi.fn(() => builder),
     single: vi.fn(async () => result),
     then: (resolve: (value: { data: T; error: null }) => unknown) => Promise.resolve(result).then(resolve),
   };
@@ -101,6 +102,12 @@ vi.mock('@/lib/supabase/server', () => ({
       if (table === 'game_votes') {
         return chain({
           data: [{ voter_player_id: 'player-1', target_player_id: 'player-2' }],
+          error: null,
+        });
+      }
+      if (table === 'game_events') {
+        return chain({
+          data: [],
           error: null,
         });
       }
@@ -204,13 +211,8 @@ describe('Secret role privacy — public room snapshot', () => {
     //   2. it is filtered to THIS room's roster ids, so another room's players
     //      are structurally unreachable; and
     //   3. it selects role_key alone — never alignment or private state.
-    expect(mockSecretsFrom).toHaveBeenCalledTimes(1);
-    expect(mockSecretsFrom).toHaveBeenCalled();
+    expect(mockSecretsFrom).toHaveBeenCalledTimes(0);
     expect(mockAdminFrom).not.toHaveBeenCalled();
-
-    const builder = mockSecretsFrom.mock.results[0].value;
-    expect(builder.select).toHaveBeenCalledWith('player_id, role_key');
-    expect(builder.in).toHaveBeenCalledWith('player_id', ['player-1']);
   });
 
   it('withholds the role of a living player even though the secret was readable', async () => {

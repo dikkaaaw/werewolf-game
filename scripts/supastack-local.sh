@@ -117,6 +117,23 @@ install_bins() {
     tar -xf "$STATE/auth.tar.gz" -C "$STATE/authx"
     install -m 0755 "$STATE/authx/auth" "$BIN/auth"
   fi
+  # Local-only HS256 token generator used by `env`. Stdlib only: no PyJWT
+  # dependency and no hosted credentials.
+  cat > "$STATE/mkservice.py" <<'PY'
+import base64, hashlib, hmac, json, sys, time
+secret = sys.argv[1].encode()
+role = sys.argv[2] if len(sys.argv) > 2 else "service_role"
+now = int(time.time())
+header = {"alg": "HS256", "typ": "JWT"}
+payload = {"iss": "supabase-local", "ref": "local", "role": role, "iat": now, "exp": now + 86400, "aud": "authenticated"}
+def part(value):
+    raw = json.dumps(value, separators=(",", ":")).encode()
+    return base64.urlsafe_b64encode(raw).rstrip(b"=")
+unsigned = part(header) + b"." + part(payload)
+signature = base64.urlsafe_b64encode(hmac.new(secret, unsigned, hashlib.sha256).digest()).rstrip(b"=")
+print((unsigned + b"." + signature).decode())
+PY
+  chmod 0700 "$STATE/mkservice.py"
   log "postgrest=$($BIN/postgrest --version)  gotrue=$($BIN/auth version)"
 }
 

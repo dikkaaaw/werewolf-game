@@ -1,8 +1,10 @@
 'use client'
 
 import { SETTINGS } from '@/lib/game/settings'
+import Link from 'next/link'
 import type { PhaseTheme } from '@/lib/game/phase-theme'
 import { isSameUser, type SafePlayer, type SafeRoom } from '@/lib/game/safe-room'
+import type { SettingsPayload } from './LobbySettings'
 
 /**
  * The start threshold, aliased for the template. Pulled from SETTINGS rather
@@ -24,6 +26,7 @@ export interface LobbyPanelProps {
     onToggleReady: () => void
     onStartGame: () => void
     onDevAddBots: (count: number) => void
+    onSaveSettings?: (payload: SettingsPayload) => Promise<void>
 }
 
 function capacityTone(current: number, max: number): string {
@@ -60,11 +63,11 @@ export function LobbyPanel({
     const roomFull = playerCount >= room.maxPlayers
 
     return (
-        <div className="flex flex-col gap-5">
+        <div className="flex flex-col gap-3">
             {/* --- Room identity: code, capacity, host --- */}
             <section
                 aria-label="Room details"
-                className={`rounded-2xl border p-5 shadow-xl sm:p-6 ${theme.surface} ${theme.accentGlow}`}
+                className={`rounded-2xl border p-4 shadow-xl sm:p-5 ${theme.surface} ${theme.accentGlow}`}
             >
                 <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
                     <div className="min-w-0">
@@ -73,7 +76,7 @@ export function LobbyPanel({
                         >
                             Room Code
                         </p>
-                        <div className="mt-1.5 flex items-center gap-3">
+                        <div className="mt-1 flex items-center gap-3">
                             <span
                                 className={`font-mono text-3xl font-black tracking-[0.2em] sm:text-4xl ${theme.accent}`}
                             >
@@ -113,7 +116,7 @@ export function LobbyPanel({
                             aria-valuemin={0}
                             aria-valuemax={room.maxPlayers}
                             aria-label="Room capacity"
-                            className={`mt-1.5 h-2 w-full overflow-hidden rounded-full border ${theme.border} bg-black/20`}
+                            className={`mt-1 h-2 w-full overflow-hidden rounded-full border ${theme.border} bg-black/20`}
                         >
                             <div
                                 className={`h-full rounded-full transition-[width] duration-500 motion-reduce:transition-none ${capacityTone(playerCount, room.maxPlayers)}`}
@@ -122,7 +125,7 @@ export function LobbyPanel({
                                 }}
                             />
                         </div>
-                        <p className={`mt-1.5 text-[11px] ${theme.textMuted}`}>
+                        <p className={`mt-1 text-[11px] ${theme.textMuted}`}>
                             {playerCount < MIN_STARTABLE
                                 ? `${MIN_STARTABLE - playerCount} more needed to start (min ${MIN_STARTABLE})`
                                 : readyCount < playerCount
@@ -133,13 +136,32 @@ export function LobbyPanel({
                 </div>
             </section>
 
+            {/* --- Game settings: compact navigation into the dedicated page ------ */}
+            <Link
+                href={`/rooms/${room.id}/settings`}
+                className={`flex items-center justify-between gap-3 rounded-2xl border p-4 shadow-xl transition focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 motion-reduce:transition-none ${theme.surface} ${theme.buttonNeutral}`}
+            >
+                <span className="flex items-center gap-2.5">
+                    <svg aria-hidden="true" className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <circle cx="12" cy="12" r="3" />
+                        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82 1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+                    </svg>
+                    <span className="text-sm font-semibold">
+                        Game Settings
+                    </span>
+                </span>
+                <span className={`text-xs ${theme.textMuted}`}>
+                    Night, day, voting and roles
+                </span>
+            </Link>
+
             {/* --- Roster: spacious scannable player cards --- */}
             <section
                 aria-label="Players"
-                className={`rounded-2xl border p-5 shadow-xl sm:p-6 ${theme.surface}`}
+                className={`rounded-2xl border p-4 shadow-xl sm:p-5 ${theme.surface}`}
             >
                 <div
-                    className={`flex items-baseline justify-between border-b pb-3 ${theme.divider}`}
+                    className={`flex items-baseline justify-between border-b pb-2 ${theme.divider}`}
                 >
                     <h2 className={`text-sm font-bold uppercase tracking-[0.18em] ${theme.text}`}>
                         Village
@@ -154,7 +176,7 @@ export function LobbyPanel({
                         No one has arrived yet. Share the room code to invite players.
                     </p>
                 ) : (
-                    <ul className="mt-4 grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+                    <ul className="mt-3 grid grid-cols-1 gap-2.5 sm:grid-cols-2">
                         {room.players.map((player) => (
                             <PlayerCard
                                 key={player.id}
@@ -171,7 +193,7 @@ export function LobbyPanel({
             {/* --- Controls: host start is the primary position --- */}
             <section
                 aria-label="Lobby controls"
-                className={`rounded-2xl border p-5 shadow-xl sm:p-6 ${theme.surface}`}
+                className={`rounded-2xl border p-4 shadow-xl sm:p-5 ${theme.surface}`}
             >
                 <div className="flex flex-col gap-4">
                     <div className="flex flex-col gap-3 sm:flex-row">

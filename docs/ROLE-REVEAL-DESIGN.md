@@ -107,7 +107,7 @@ players: Array<{
    * null for every living player, always — including at game start, during the
    * night phase, and for the caller themself.
    */
-  revealedRole: 'werewolf' | 'villager' | 'seer' | 'doctor' | null;
+  revealedRole: 'werewolf' | 'villager' | 'seer' | 'guardian_angel' | null;
 }>
 ```
 

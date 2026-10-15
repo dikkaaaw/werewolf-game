@@ -24,7 +24,7 @@ describe('Role artwork — mapping', () => {
     const werewolf = getRoleCharacterArtwork('werewolf');
     const villager = getRoleCharacterArtwork('villager');
     const seer = getRoleCharacterArtwork('seer');
-    const doctor = getRoleCharacterArtwork('doctor');
+    const doctor = getRoleCharacterArtwork('guardian_angel');
 
     expect(new Set([werewolf, villager, seer, doctor]).size).toBe(4);
     expect(werewolf).toBe('/assets/images/role-character/werewolf.jpg');
@@ -78,7 +78,7 @@ describe('Role artwork — fallback behaviour', () => {
     // `set_role_config` only accepts werewolf/villager/seer/doctor, so mapping
     // the extra artwork files would imply roles the game cannot deal.
     const mapped = new Set(Object.keys(ROLE_CHARACTER_IMAGE));
-    expect(mapped.has('hunter')).toBe(false);
+    expect(mapped.has('hunter')).toBe(true);
     expect(mapped.has('sorcerer')).toBe(false);
     expect(mapped.has('serial_killer')).toBe(false);
   });

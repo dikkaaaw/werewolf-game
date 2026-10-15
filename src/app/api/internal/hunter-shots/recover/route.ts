@@ -3,7 +3,7 @@ import 'server-only';
 import { createAdminClient } from '@/lib/supabase/server';
 
 export async function POST(request: Request): Promise<Response> {
-  const expected = process.env.PENDING_ACTION_SCHEDULER_SECRET;
+  const expected = process.env.SCHEDULER_SECRET;
   const authorization = request.headers.get('authorization') ?? '';
   const provided = authorization.startsWith('Bearer ') ? authorization.slice(7) : '';
 

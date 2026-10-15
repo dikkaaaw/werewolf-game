@@ -17,14 +17,18 @@ begin
       and c.status in ('pending','processing')
       and (p_room_id is null or c.room_id = p_room_id)
       and now() > (c.created_at + interval '30 seconds')
+    for update of c, w skip locked
   loop
     update public.death_resolution_work_items
-      set status='failed', completed_at=now()
-    where id = v_work.id;
-    update public.death_resolution_cycles
-      set status='completed', completed_at=now()
-    where id = v_work.cycle_id;
-    v_expired := v_expired + 1;
+      set status='completed', completed_at=now(),
+          payload = payload || jsonb_build_object('outcome', 'expired')
+    where id = v_work.id and status in ('pending', 'processing');
+    if found then
+      update public.death_resolution_cycles
+        set status='completed', completed_at=now()
+      where id = v_work.cycle_id;
+      v_expired := v_expired + 1;
+    end if;
   end loop;
   return jsonb_build_object('ok', true, 'expired', v_expired);
 end;

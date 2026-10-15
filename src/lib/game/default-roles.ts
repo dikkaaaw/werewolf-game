@@ -31,13 +31,13 @@ export function getDefaultRoleConfig(playerCount: number): RoleConfigEntry[] {
   }
 
   const seerCount = 1;
-  const doctorCount = 1;
-  const villagerCount = playerCount - (werewolfCount + seerCount + doctorCount);
+  const guardianAngelCount = 1;
+  const villagerCount = playerCount - (werewolfCount + seerCount + guardianAngelCount);
 
   return [
     { roleKey: 'werewolf', roleCount: werewolfCount, config: {} },
     { roleKey: 'seer', roleCount: seerCount, config: {} },
-    { roleKey: 'doctor', roleCount: doctorCount, config: {} },
+    { roleKey: 'guardian_angel', roleCount: guardianAngelCount, config: {} },
     { roleKey: 'villager', roleCount: villagerCount, config: {} },
   ];
 }

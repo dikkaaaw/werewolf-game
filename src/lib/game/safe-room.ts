@@ -30,6 +30,14 @@ export interface SafePlayer {
   revealedRole: string | null;
 }
 
+export interface SafeEvent {
+  id: number;
+  eventType: string;
+  publicPayload: Record<string, unknown>;
+  roundNumber: number | null;
+  createdAt: string;
+}
+
 export interface SafeRoom {
   id: string;
   roomCode: string;
@@ -45,7 +53,17 @@ export interface SafeRoom {
   createdAt: string;
   updatedAt: string;
   winner?: string;
+  /**
+   * Host-configured phase durations, present only while the room is in the
+   * lobby. Null once the game has started — the setup is locked by then, and
+   * the field's presence/absence must not become a side channel that tells a
+   * client the game has begun.
+   */
+  phaseSeconds?: { night: number; day: number; voting: number } | null;
+  /** Saved `room_role_configs` as `{ roleKey: count }`. Lobby-only, same reason. */
+  roleCounts?: Record<string, number> | null;
   votes?: Array<{ voterPlayerId: string; targetPlayerId: string }>;
+  events?: SafeEvent[];
   players: SafePlayer[];
 }
 

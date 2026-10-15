@@ -88,11 +88,45 @@ export const castVoteSchema = z.object({
 
 export const leaveRoomSchema = z.object({}).optional().default({});
 
+/**
+ * One phase duration.
+ *
+ * The bounds here are the widest of the per-phase limits (day allows 600s,
+ * night and voting 300s) so a single schema can accept any phase. The
+ * per-phase bound is enforced by `validatePhaseSeconds` in room-settings.ts,
+ * which reports a field-level error instead of a blanket 400.
+ */
 export const phaseDurationOverrideSchema = z
   .number()
   .int()
-  .min(1)
-  .max(600);
+  .min(SETTINGS.phaseSecondsBounds.night.min)
+  .max(SETTINGS.phaseSecondsBounds.day.max);
+
+export const phaseSecondsSchema = z
+  .object({
+    night: phaseDurationOverrideSchema.optional(),
+    day: phaseDurationOverrideSchema.optional(),
+    voting: phaseDurationOverrideSchema.optional(),
+  })
+  .strict();
+
+/**
+ * POST /api/rooms/:roomId/settings.
+ *
+ * Both halves are optional so the host can adjust durations without restating
+ * roles and vice versa. Validation of the actual values (bounds, counts summing
+ * to the roster, at least one Werewolf) happens in `validatePhaseSeconds` /
+ * `validateRoleConfig`, which produce field-level issues.
+ */
+export const updateRoomSettingsSchema = z
+  .object({
+    phaseSeconds: phaseSecondsSchema.optional(),
+    roles: z.array(roleConfigEntrySchema).min(1).max(20).optional(),
+  })
+  .strict()
+  .refine((data) => data.phaseSeconds !== undefined || data.roles !== undefined, {
+    message: 'Provide phaseSeconds, roles, or both.',
+  });
 
 export const toggleReadySchema = z.object({
   ready: z.boolean().optional(),
@@ -110,20 +144,20 @@ export const startGameSchema = z.object({
 });
 
 /**
- * Room-level host settings.
+ * Room-level host settings, as stored in `rooms.settings`.
  *
- * NOTE: there is no route or UI that writes this yet — `rooms.settings` is
- * currently only populated by `set_role_config` (roles) and `finish_game`
- * (winner). The shape is kept here so the keys stay named and typed, but
- * nothing reads it from the database yet.
+ * `phaseSeconds` is written by `POST /api/rooms/:roomId/settings` (via the
+ * `set_room_settings` RPC) and read by `phase-advancement` so a host-chosen
+ * duration survives across phase transitions instead of reverting to the
+ * SETTINGS default.
+ *
+ * `revealRoleOnElimination` is consumed by `src/lib/game/reveal.ts`. Nothing
+ * writes it yet; it defaults to true.
  *
  * `voteTieRule` was REMOVED for the MVP: the tie-break had no supported
  * configuration path (no settings writer, and `resolveVote` was always called
  * with the literal 'none'), so it was an accepted-but-ignored knob. A tie in the
  * MVP simply eliminates nobody. See GAME-RULES.md §8.
- *
- * `revealRoleOnElimination` is consumed by `src/lib/game/reveal.ts`; it simply
- * defaults to true while nothing writes it.
  */
 export const roomSettingsSchema = z
   .object({
@@ -165,3 +199,4 @@ export type JoinRoomInput = z.infer<typeof joinRoomSchema>;
 export type SubmitActionInput = z.infer<typeof submitActionSchema>;
 export type CastVoteInput = z.infer<typeof castVoteSchema>;
 export type RoomSettingsInput = z.infer<typeof roomSettingsSchema>;
+export type UpdateRoomSettingsInput = z.infer<typeof updateRoomSettingsSchema>;

@@ -46,12 +46,12 @@ describe('UI Phase-Aware Roster & Compact Actions Logic', () => {
 
     expect(nightActionLabel(werewolfRole.roleKey)).toBe('Eat');
     expect(nightActionLabel(seerRole.roleKey)).toBe('Investigate');
-    expect(nightActionLabel('doctor')).toBe('Protect');
+    expect(nightActionLabel('guardian_angel')).toBe('Protect');
   });
 
   it('Night Phase: Villagers and dead players do not receive action buttons', () => {
     const villagerRole = { roleKey: 'villager', alignment: 'village' };
-    const actionableRoles = ['werewolf', 'seer', 'doctor'];
+    const actionableRoles = ['werewolf', 'seer', 'guardian_angel'];
     expect(actionableRoles.includes(villagerRole.roleKey)).toBe(false);
   });
 

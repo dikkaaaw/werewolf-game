@@ -202,9 +202,9 @@ describe('role composition helpers', () => {
     expect(counts).toEqual({ werewolf: 2, villager: 3 });
   });
 
-  it('round-trips the four editable counts into entries', () => {
-    const entries = roleEntriesFromCounts({ werewolf: 1, seer: 1, guardian_angel: 1, villager: 2 });
-    expect(entries.map((e) => e.roleKey)).toEqual(['werewolf', 'seer', 'guardian_angel', 'villager']);
+  it('round-trips the editable counts into entries', () => {
+    const entries = roleEntriesFromCounts({ werewolf: 1, seer: 1, guardian_angel: 1, hunter: 0, tanner: 0, mayor: 0, villager: 2 });
+    expect(entries.map((e) => e.roleKey)).toEqual(['werewolf', 'seer', 'guardian_angel', 'hunter', 'tanner', 'mayor', 'villager']);
     expect(roleCountsFromEntries(entries)).toEqual({
       werewolf: 1,
       seer: 1,
@@ -215,26 +215,29 @@ describe('role composition helpers', () => {
 
   it('adopts a saved composition that matches the roster', () => {
     const saved = compositionFromCounts(
-      { werewolf: 2, seer: 1, guardian_angel: 1, villager: 6 },
+      { werewolf: 2, seer: 1, guardian_angel: 1, hunter: 0, tanner: 0, mayor: 0, villager: 6 },
       10,
-      roleEntriesFromCounts({ werewolf: 1, seer: 1, guardian_angel: 1, villager: 7 }),
+      roleEntriesFromCounts({ werewolf: 1, seer: 1, guardian_angel: 1, hunter: 0, tanner: 0, mayor: 0, villager: 7 }),
     );
-    expect(saved).toEqual({ werewolf: 2, seer: 1, guardian_angel: 1, villager: 6 });
+    expect(saved).toEqual({ werewolf: 2, seer: 1, guardian_angel: 1, hunter: 0, tanner: 0, mayor: 0, villager: 6 });
   });
 
   it('falls back to the default when the saved total no longer matches the roster', () => {
     // A player joined after the host saved 5 players' worth of roles.
-    const fallback = roleEntriesFromCounts({ werewolf: 2, seer: 1, guardian_angel: 1, villager: 2 });
-    const resolved = compositionFromCounts({ werewolf: 2, seer: 1, guardian_angel: 1, villager: 1 }, 6, fallback);
-    expect(resolved).toEqual({ werewolf: 2, seer: 1, guardian_angel: 1, villager: 2 });
+    const fallback = roleEntriesFromCounts({ werewolf: 2, seer: 1, guardian_angel: 1, hunter: 0, tanner: 0, mayor: 0, villager: 2 });
+    const resolved = compositionFromCounts({ werewolf: 2, seer: 1, guardian_angel: 1, hunter: 0, tanner: 0, mayor: 0, villager: 1 }, 6, fallback);
+    expect(resolved).toEqual({ werewolf: 2, seer: 1, guardian_angel: 1, hunter: 0, tanner: 0, mayor: 0, villager: 2 });
   });
 
   it('falls back to the default when nothing has been saved', () => {
-    const fallback = roleEntriesFromCounts({ werewolf: 1, seer: 1, guardian_angel: 1, villager: 2 });
+    const fallback = roleEntriesFromCounts({ werewolf: 1, seer: 1, guardian_angel: 1, hunter: 0, tanner: 0, mayor: 0, villager: 2 });
     expect(compositionFromCounts(undefined, 5, fallback)).toEqual({
       werewolf: 1,
       seer: 1,
       guardian_angel: 1,
+      hunter: 0,
+      tanner: 0,
+      mayor: 0,
       villager: 2,
     });
   });

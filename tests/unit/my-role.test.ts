@@ -169,7 +169,7 @@ describe('GET /api/rooms/[roomId]/my-role — private role isolation', () => {
       display_name: 'Alice',
       is_alive: true,
     });
-    const secret = queryReturning({ role_key: 'doctor', alignment: 'village' });
+    const secret = queryReturning({ role_key: 'guardian_angel', alignment: 'village' });
     const order = vi.fn().mockResolvedValue({ data: [], error: null });
     const historyEq: ReturnType<typeof vi.fn> = vi.fn();
     historyEq.mockReturnValue({ eq: historyEq, order });
@@ -274,5 +274,107 @@ describe('GET /api/rooms/[roomId]/my-role — private role isolation', () => {
     expect(res.status).toBe(429);
     expect(mockCheckRateLimit).toHaveBeenCalledWith('myRole', 'player-user-1');
     expect(mockAdminFrom).not.toHaveBeenCalled();
+  });
+});
+describe('GET /api/rooms/[roomId]/my-role — private Hunter action', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockCheckRateLimit.mockResolvedValue({
+      allowed: true,
+      remaining: 10,
+      resetAt: new Date(Date.now() + 60000).toISOString(),
+    });
+  });
+
+  function rosterQuery(rows: unknown[]) {
+    return {
+      select: vi.fn().mockReturnValue({
+        eq: vi.fn().mockResolvedValue({ data: rows, error: null }),
+      }),
+    };
+  }
+
+  it('exposes the pending action and eligible targets only to the owning Hunter', async () => {
+    mockGetUser.mockResolvedValue({ data: { user: { id: 'hunter-user-1' } }, error: null });
+
+    const member = queryReturning({
+      id: 'hunter-player-1',
+      seat_number: 1,
+      display_name: 'Hunter',
+      is_alive: false,
+      prompt: { type: 'hunter_final_shot' },
+      prompt_deadline_at: '2026-01-03T00:00:30.000Z',
+    });
+    const secret = queryReturning({ role_key: 'hunter', alignment: 'village' });
+
+    const order = vi.fn().mockResolvedValue({ data: [], error: null });
+    const historyEq: ReturnType<typeof vi.fn> = vi.fn();
+    historyEq.mockReturnValue({ eq: historyEq, order });
+    const results = { select: vi.fn().mockReturnValue({ eq: historyEq }), historyEq };
+
+    const night = nightActionMocks(4);
+
+    const roster = rosterQuery([
+      { id: 'hunter-player-1', display_name: 'Hunter', is_alive: false },
+      { id: 'player-id-2', display_name: 'Bob', is_alive: true },
+      { id: 'player-id-3', display_name: 'Carol', is_alive: false },
+    ]);
+
+    mockAdminFrom
+      .mockReturnValueOnce(member.builder)
+      .mockReturnValueOnce(secret.builder)
+      .mockReturnValueOnce(results)
+      .mockReturnValueOnce(night.room)
+      .mockReturnValueOnce(night.action)
+      .mockReturnValueOnce(roster);
+
+    const res = await getMyRoleHandler(req(), {
+      params: Promise.resolve({ roomId: 'room-123' }),
+    });
+
+    const json = await res.json();
+    expect(json.roleKey).toBe('hunter');
+    expect(json.hunterAction).toEqual({
+      deadlineAt: '2026-01-03T00:00:30.000Z',
+      targets: [
+        { id: 'player-id-2', displayName: 'Bob' },
+      ],
+    });
+    expect(json.hunterAction.targets.some((t: { id: string }) => t.id === 'player-id-3')).toBe(false);
+  });
+
+  it('does not expose a pending action when the player has no prompt', async () => {
+    mockGetUser.mockResolvedValue({ data: { user: { id: 'hunter-user-1' } }, error: null });
+
+    const member = queryReturning({
+      id: 'hunter-player-1',
+      seat_number: 1,
+      display_name: 'Hunter',
+      is_alive: false,
+      prompt: null,
+      prompt_deadline_at: null,
+    });
+    const secret = queryReturning({ role_key: 'hunter', alignment: 'village' });
+
+    const order = vi.fn().mockResolvedValue({ data: [], error: null });
+    const historyEq: ReturnType<typeof vi.fn> = vi.fn();
+    historyEq.mockReturnValue({ eq: historyEq, order });
+    const results = { select: vi.fn().mockReturnValue({ eq: historyEq }), historyEq };
+
+    const night = nightActionMocks(4);
+
+    mockAdminFrom
+      .mockReturnValueOnce(member.builder)
+      .mockReturnValueOnce(secret.builder)
+      .mockReturnValueOnce(results)
+      .mockReturnValueOnce(night.room)
+      .mockReturnValueOnce(night.action);
+
+    const res = await getMyRoleHandler(req(), {
+      params: Promise.resolve({ roomId: 'room-123' }),
+    });
+
+    const json = await res.json();
+    expect('hunterAction' in json).toBe(false);
   });
 });

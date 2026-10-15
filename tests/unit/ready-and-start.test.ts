@@ -404,6 +404,11 @@ describe('Ready System & Start Game Routes', () => {
         }),
       });
 
+      mockAdminFrom.mockReturnValueOnce({
+        select: vi.fn().mockReturnThis(),
+        eq: vi.fn().mockReturnThis(),
+        order: vi.fn().mockResolvedValue({ data: [], error: null }),
+      }); // loadSavedRoleConfig
       mockAdminRpc.mockResolvedValueOnce({ error: null }); // set_role_config
       mockAdminRpc.mockResolvedValueOnce({
         data: { ok: true, roundNumber: 1, playerCount: 5 },

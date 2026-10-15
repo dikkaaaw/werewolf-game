@@ -275,11 +275,11 @@ Unresolved source details:
 - `Second Hunter dies while first is still selecting`: since the menu is synchronous, no second menu can begin until the first manager returns; therefore the reference serializes Menus globally rather than permitting overlapping elections.
 - `Suppress + another trigger on same player`: suppression flags prevent normal `Hunter` logic for burned/flee/idle/sk victims, while a separate shot path can produce a new `HunterShot` trigger. The exact order is source-given if both method calls already use distinct flags.
 - `VERIFIED` order: state mutation first, chatter, Delay add, deferred menu dispatch, recursive kills next, then `CheckForGameEnd` (`Werewolf.cs:4441`). `PARTIALLY UNRESOLVED`: runtime ordering cannot be proven independent of Telegram callback/threading beyond source lack of async locks.
-- `SAFE POLICY`: implement strict sequential durable actions where concurrent retrigger creates at most one claim. Once `resolve_pending_action` claims a token the second submission is idempotent/rejected and timeout scheduling cancels only the originating action.
+- `SAFE POLICY`: implement strict sequential durable actions where a concurrent retrigger can create at most one prompt. The prompt lives on the triggering player row with a deadline; the first submission wins and later ones are idempotent/rejected, and expiry clears only the originating prompt.
 
 ### Implementation readiness decision (Stage E10)
 - **READY WITH EXPLICIT ADAPTATION**: every critical Hunter branch now has either exact source evidence or a documented bounded adaptation.
-- The adaptation required is deterministic pending-actions rather than the reference's inline 30-second synchronous Telegram menu.
+- The adaptation required is a durable per-player prompt with a deadline, resolved by the room tick, rather than the reference's inline 30-second synchronous Telegram menu.
 - Residual risk is exception handling around non-dictionary failures (Network/DB); this project must handle retries at the application layer.
 ## Missing source details
 

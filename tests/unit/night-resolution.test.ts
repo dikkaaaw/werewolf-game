@@ -130,14 +130,14 @@ describe('resolveNight — elimination rules (GAME-RULES §6)', () => {
   it('a doctor protecting a dead player does not bring them into the protect set', () => {
     const players = [
       player('w1', 1, 'werewolf', 'werewolf'),
-      player('d1', 2, 'doctor'),
+      player('d1', 2, 'guardian_angel'),
       player('v1', 3, 'villager', 'village', false),
     ];
     const result = resolveNight({
       players,
       actions: [
         act('w1', 'werewolf', 'eliminate', 'v1'),
-        act('d1', 'doctor', 'protect', 'v1'),
+        act('d1', 'guardian_angel', 'protect', 'v1'),
       ],
     });
     expect(result.internal.protectedPlayerIds).toEqual([]);
@@ -149,14 +149,14 @@ describe('resolveNight — doctor protection precedence (GAME-RULES §6 step 2)'
   it('a protected target survives: killIds is the difference', () => {
     const players = [
       player('w1', 1, 'werewolf', 'werewolf'),
-      player('d1', 2, 'doctor'),
+      player('d1', 2, 'guardian_angel'),
       player('v1', 3),
     ];
     const result = resolveNight({
       players,
       actions: [
         act('w1', 'werewolf', 'eliminate', 'v1'),
-        act('d1', 'doctor', 'protect', 'v1'),
+        act('d1', 'guardian_angel', 'protect', 'v1'),
       ],
     });
     expect(result.public.eliminated).toEqual([]);
@@ -168,7 +168,7 @@ describe('resolveNight — doctor protection precedence (GAME-RULES §6 step 2)'
   it('protection does not spare an un-attacked player from other bookkeeping', () => {
     const players = [
       player('w1', 1, 'werewolf', 'werewolf'),
-      player('d1', 2, 'doctor'),
+      player('d1', 2, 'guardian_angel'),
       player('v1', 3),
       player('v2', 4),
     ];
@@ -176,7 +176,7 @@ describe('resolveNight — doctor protection precedence (GAME-RULES §6 step 2)'
       players,
       actions: [
         act('w1', 'werewolf', 'eliminate', 'v2'),
-        act('d1', 'doctor', 'protect', 'v1'),
+        act('d1', 'guardian_angel', 'protect', 'v1'),
       ],
     });
     // v1 was protected but not attacked, so nothing is "saved".
@@ -257,13 +257,13 @@ describe('resolveNight — idempotent replay (F3 retry)', () => {
   it('resolves identically when the same action set is resolved twice', () => {
     const players = [
       player('w1', 1, 'werewolf', 'werewolf'),
-      player('d1', 2, 'doctor'),
+      player('d1', 2, 'guardian_angel'),
       player('v1', 3),
       player('s1', 4, 'seer'),
     ];
     const actions = [
       act('w1', 'werewolf', 'eliminate', 'v1'),
-      act('d1', 'doctor', 'protect', 'v1'),
+      act('d1', 'guardian_angel', 'protect', 'v1'),
       act('s1', 'seer', 'investigate', 'v1'),
     ];
     const first = resolveNight({ players, actions });

@@ -279,7 +279,7 @@ describe('validateNightAction', () => {
   });
 
   it('enforces forbidRepeatTarget for the doctor', () => {
-    const doctor = { ...base, roleKey: 'doctor', alignment: 'village' as const };
+    const doctor = { ...base, roleKey: 'guardian_angel', alignment: 'village' as const };
     const input = actionInput({
       actor: doctor,
       actionType: 'protect',
@@ -312,8 +312,8 @@ describe('validateNightAction', () => {
   });
 
   it('A2: refuses a Doctor protecting another Doctor', () => {
-    const docA = { ...base, roleKey: 'doctor', alignment: 'village' as const };
-    const docB = { ...target, playerId: 'p2', roleKey: 'doctor', alignment: 'village' as const };
+    const docA = { ...base, roleKey: 'guardian_angel', alignment: 'village' as const };
+    const docB = { ...target, playerId: 'p2', roleKey: 'guardian_angel', alignment: 'village' as const };
 
     expect(
       validateNightAction(actionInput({ actor: docA, actionType: 'protect', target: docB })),
@@ -321,7 +321,7 @@ describe('validateNightAction', () => {
   });
 
   it('A2: still allows a Doctor to protect an eligible non-Doctor', () => {
-    const doc = { ...base, roleKey: 'doctor', alignment: 'village' as const };
+    const doc = { ...base, roleKey: 'guardian_angel', alignment: 'village' as const };
     const seer = { ...target, playerId: 'p2', roleKey: 'seer', alignment: 'village' as const };
 
     expect(
@@ -359,7 +359,7 @@ describe('validateNightAction', () => {
     // false and the authoritative `submit_night_action` RPC rejected
     // self-targets regardless, so it could never do anything except mislead.
     // Self-protection is a rule change, not a config value.
-    const doctor = { ...base, roleKey: 'doctor', alignment: 'village' as const };
+    const doctor = { ...base, roleKey: 'guardian_angel', alignment: 'village' as const };
     const selfTarget = { ...doctor, playerId: 'p1' };
 
     expect(
@@ -372,7 +372,7 @@ describe('validateNightAction', () => {
     const acting: Array<[typeof base.roleKey, 'eliminate' | 'investigate' | 'protect']> = [
       ['werewolf', 'eliminate'],
       ['seer', 'investigate'],
-      ['doctor', 'protect'],
+      ['guardian_angel', 'protect'],
     ];
     for (const [roleKey, actionType] of acting) {
       const actor = { ...base, roleKey, alignment: 'village' as const };

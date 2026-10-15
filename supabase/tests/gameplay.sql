@@ -1056,4 +1056,180 @@ begin
     'the finished room is still finished');
 end $$;
 
+-- ===========================================================================
+-- Host game settings (migration 0011, set_room_settings + set_role_config)
+--
+-- Covers the lobby Game Settings feature at the database boundary: who may
+-- write, when it locks, the duration bounds, partial-merge behaviour, and that
+-- a started game reads back the durations the host actually chose rather than
+-- the built-in default.
+-- ===========================================================================
+\echo '### L. host game settings are validated, locked and honoured'
+
+do $$
+declare
+  v_room   uuid;
+  v_host   uuid := pg_temp.uuid(980);
+  v_other  uuid := pg_temp.uuid(984);
+  v_code   text;
+  v_res    jsonb;
+  v_roles  text[] := array['werewolf','seer','doctor','villager','villager'];
+  v_deadline interval;
+begin
+  -- Five players: host + four. uuid 981..984.
+  v_code := public.create_room(v_host, 'Host', 20) ->> 'roomCode';
+  perform public.join_room(v_code, pg_temp.uuid(981), 'A');
+  perform public.join_room(v_code, pg_temp.uuid(982), 'B');
+  perform public.join_room(v_code, pg_temp.uuid(983), 'C');
+  perform public.join_room(v_code, v_other, 'D');
+  select id into v_room from public.rooms where room_code = v_code;
+
+  -- L1. The host can save a valid configuration.
+  v_res := public.set_room_settings(v_room, v_host,
+    '{"night":45,"day":90,"voting":30}'::jsonb);
+  perform pg_temp.assert_eq(v_res ->> 'ok', 'true',
+    'L1 the host can save valid phase durations');
+  perform pg_temp.assert_eq(
+    (select settings->'phaseSeconds'->>'night' from public.rooms where id = v_room),
+    '45', 'L1 the night duration was persisted');
+
+  -- L2. A non-host is refused. Identity comes from rooms.host_user_id, so a
+  -- caller naming someone else's user id cannot get past this.
+  v_res := public.set_room_settings(v_room, v_other,
+    '{"night":10}'::jsonb);
+  perform pg_temp.assert_eq(v_res #>> '{error,code}', 'forbidden',
+    'L2 a non-host cannot change settings');
+  perform pg_temp.assert_eq(
+    (select settings->'phaseSeconds'->>'night' from public.rooms where id = v_room),
+    '45', 'L2 a rejected write left the saved duration untouched');
+
+  -- L3. Out-of-bounds values are refused rather than clamped, so the host can
+  -- never believe they set a duration the engine silently raised.
+  v_res := public.set_room_settings(v_room, v_host, '{"night":5}'::jsonb);
+  perform pg_temp.assert_eq(v_res #>> '{error,code}', 'invalid_settings',
+    'L3 a duration below the floor is rejected');
+  v_res := public.set_room_settings(v_room, v_host, '{"day":1200}'::jsonb);
+  perform pg_temp.assert_eq(v_res #>> '{error,code}', 'invalid_settings',
+    'L3 a duration above the ceiling is rejected');
+  v_res := public.set_room_settings(v_room, v_host, '{"voting":12.5}'::jsonb);
+  perform pg_temp.assert_eq(v_res #>> '{error,code}', 'invalid_settings',
+    'L3 a non-integer duration is rejected');
+
+  -- L4. An unknown phase key is refused rather than silently stored.
+  v_res := public.set_room_settings(v_room, v_host, '{"dusk":60}'::jsonb);
+  perform pg_temp.assert_eq(v_res #>> '{error,code}', 'invalid_settings',
+    'L4 an unknown phase key is rejected');
+
+  -- L5. A partial update merges: the phases the host did not mention keep the
+  -- values already saved, instead of being reset to the default.
+  v_res := public.set_room_settings(v_room, v_host, '{"day":120}'::jsonb);
+  perform pg_temp.assert_eq(v_res ->> 'ok', 'true',
+    'L5 a partial update is accepted');
+  perform pg_temp.assert_eq(
+    (select settings->'phaseSeconds'->>'night' from public.rooms where id = v_room),
+    '45', 'L5 an unmentioned phase keeps its saved value');
+  perform pg_temp.assert_eq(
+    (select settings->'phaseSeconds'->>'day' from public.rooms where id = v_room),
+    '120', 'L5 the mentioned phase is updated');
+
+  -- L6. Role composition: the counts must sum to the roster.
+  v_res := public.set_role_config(v_room, v_host,
+    '[{"roleKey":"werewolf","roleCount":1,"config":{}},
+      {"roleKey":"seer","roleCount":1,"config":{}},
+      {"roleKey":"doctor","roleCount":1,"config":{}},
+      {"roleKey":"villager","roleCount":1,"config":{}}]'::jsonb);
+  perform pg_temp.assert_eq(v_res #>> '{error,code}', 'role_count_mismatch',
+    'L6 role counts that do not match the roster are rejected');
+
+  -- L7. Save a composition that DOES match, and confirm it is what start_game
+  -- validates against.
+  v_res := public.set_role_config(v_room, v_host,
+    '[{"roleKey":"werewolf","roleCount":2,"config":{}},
+      {"roleKey":"seer","roleCount":1,"config":{}},
+      {"roleKey":"doctor","roleCount":1,"config":{}},
+      {"roleKey":"villager","roleCount":1,"config":{}}]'::jsonb);
+  perform pg_temp.assert_eq(v_res ->> 'ok', 'true',
+    'L7 a composition matching the roster is accepted');
+  perform pg_temp.assert_eq(
+    (select coalesce(sum(role_count),0)::integer from public.room_role_configs where room_id = v_room),
+    5, 'L7 the saved composition totals the player count');
+
+  -- L8. A composition with no Werewolf can be stored but can never start: the
+  -- engine refuses it at start time, which is the gate that matters.
+  v_res := public.set_role_config(v_room, v_host,
+    '[{"roleKey":"seer","roleCount":1,"config":{}},
+      {"roleKey":"doctor","roleCount":1,"config":{}},
+      {"roleKey":"villager","roleCount":3,"config":{}}]'::jsonb);
+  perform pg_temp.assert_eq(v_res ->> 'ok', 'true',
+    'L8 a zero-werewolf composition passes the sum check');
+  -- Restore a startable composition for the remaining assertions.
+  perform public.set_role_config(v_room, v_host,
+    '[{"roleKey":"werewolf","roleCount":2,"config":{}},
+      {"roleKey":"seer","roleCount":1,"config":{}},
+      {"roleKey":"doctor","roleCount":1,"config":{}},
+      {"roleKey":"villager","roleCount":1,"config":{}}]'::jsonb);
+
+  -- L9. A zero-Werewolf roster cannot start the game, even though the counts
+  -- add up. This is the rule that stops an unusable configuration reaching play.
+  perform public.set_role_config(v_room, v_host,
+    '[{"roleKey":"seer","roleCount":1,"config":{}},
+      {"roleKey":"doctor","roleCount":1,"config":{}},
+      {"roleKey":"villager","roleCount":3,"config":{}}]'::jsonb);
+  v_res := public.start_game(v_room, v_host,
+    pg_temp.assign(v_room, array['seer','doctor','villager','villager','villager']), 45);
+  perform pg_temp.assert_eq(v_res #>> '{error,code}', 'no_werewolf',
+    'L9 start_game refuses a configuration with no Werewolf');
+
+  -- L10. Below the five-player floor the game cannot start either. Dropping one
+  -- player takes the roster to four while the saved composition still totals 5.
+  perform public.set_role_config(v_room, v_host,
+    '[{"roleKey":"werewolf","roleCount":2,"config":{}},
+      {"roleKey":"seer","roleCount":1,"config":{}},
+      {"roleKey":"doctor","roleCount":0,"config":{}},
+      {"roleKey":"villager","roleCount":2,"config":{}}]'::jsonb);
+  delete from public.room_players where room_id = v_room and user_id = v_other;
+  v_res := public.start_game(v_room, v_host,
+    pg_temp.assign(v_room, array['werewolf','werewolf','seer','villager']), 45);
+  perform pg_temp.assert_eq(v_res #>> '{error,code}', 'not_enough_players',
+    'L10 start_game still enforces the five-player minimum');
+
+  -- Put the fifth player back so the roster and the composition agree again.
+  perform public.join_room(v_code, v_other, 'D');
+  perform public.set_role_config(v_room, v_host,
+    '[{"roleKey":"werewolf","roleCount":2,"config":{}},
+      {"roleKey":"seer","roleCount":1,"config":{}},
+      {"roleKey":"doctor","roleCount":1,"config":{}},
+      {"roleKey":"villager","roleCount":1,"config":{}}]'::jsonb);
+
+  -- L11. Start Game honours the SAVED duration. 45 seconds was set in L1 and
+  -- must survive into the first night's deadline rather than reverting to a
+  -- hardcoded default.
+  v_res := public.start_game(v_room, v_host,
+    pg_temp.assign(v_room, v_roles), 45);
+  perform pg_temp.assert_eq(v_res ->> 'ok', 'true',
+    'L11 start_game succeeds with the saved configuration');
+  select phase_ends_at - now() into v_deadline from public.rooms where id = v_room;
+  perform pg_temp.assert_true(
+    v_deadline > interval '40 seconds' and v_deadline <= interval '45 seconds',
+    'L11 the first night uses the host-configured duration');
+
+  -- L12. Once the game has started, settings are locked — a concurrent or
+  -- subsequent write cannot change a duration the game is already running with.
+  v_res := public.set_room_settings(v_room, v_host, '{"night":10}'::jsonb);
+  perform pg_temp.assert_eq(v_res #>> '{error,code}', 'game_already_started',
+    'L12 settings are locked once the game has started');
+  v_res := public.set_role_config(v_room, v_host,
+    '[{"roleKey":"werewolf","roleCount":5,"config":{}}]'::jsonb);
+  perform pg_temp.assert_eq(v_res #>> '{error,code}', 'game_already_started',
+    'L12 the role configuration is locked once the game has started');
+  perform pg_temp.assert_eq(
+    (select settings->'phaseSeconds'->>'night' from public.rooms where id = v_room),
+    '45', 'L12 the running duration was not changed by the locked write');
+
+  -- L13. An unknown room is a clean not-found, never a silent success.
+  v_res := public.set_room_settings(gen_random_uuid(), v_host, '{"night":30}'::jsonb);
+  perform pg_temp.assert_eq(v_res #>> '{error,code}', 'room_not_found',
+    'L13 settings for an unknown room are refused');
+end $$;
+
 rollback;

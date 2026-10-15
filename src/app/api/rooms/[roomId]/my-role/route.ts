@@ -48,7 +48,7 @@ export async function GET(
       error: playerError,
     } = await admin
       .from('room_players')
-      .select('id, seat_number, display_name, is_alive')
+      .select('id, seat_number, display_name, is_alive, prompt, prompt_deadline_at')
       .eq('room_id', roomId)
       .eq('user_id', user.id)
       .single();
@@ -98,6 +98,25 @@ export async function GET(
       .maybeSingle();
 
 
+    // Private prompt (owner-only): this caller holds an unanswered prompt, e.g.
+    // a dead Hunter's final shot. The deadline lives on the player row, so it
+    // survives reloads and server restarts.
+    let hunterAction: { deadlineAt: string; targets: Array<{ id: string; displayName: string }> } | null = null;
+    const prompt = player.prompt as { type?: string } | null;
+    if (prompt?.type === 'hunter_final_shot') {
+      const { data: roster } = await admin
+        .from('room_players')
+        .select('id, display_name, is_alive')
+        .eq('room_id', roomId);
+
+      hunterAction = {
+        deadlineAt: player.prompt_deadline_at ?? new Date(Date.now() + 30_000).toISOString(),
+        targets: (roster ?? [])
+          .filter((r) => r.is_alive)
+          .map((r) => ({ id: r.id, displayName: r.display_name })),
+      };
+    }
+
     return ok({
       playerId: player.id,
       displayName: player.display_name,
@@ -114,6 +133,7 @@ export async function GET(
         roundNumber: r.round_number,
         result: r.result_payload,
       })),
+      ...(hunterAction ? { hunterAction } : {}),
     });
   } catch {
     return notFound('Error fetching role.');

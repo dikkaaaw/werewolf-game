@@ -56,6 +56,7 @@ export interface MyRoleSnapshot {
     roundNumber: number;
     result: { targetPlayerId: string; alignment: string };
   }>;
+  hunterAction?: { deadlineAt: string; targets: Array<{ id: string; displayName: string }> } | null;
 }
 
 export type RoomResult =

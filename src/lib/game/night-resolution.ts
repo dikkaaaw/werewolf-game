@@ -96,10 +96,13 @@ export function resolveNight(input: NightResolutionInput): NightResolutionResult
     if (action.actionType !== 'investigate') continue;
     const target = byId.get(action.targetPlayerId);
     if (!target) continue;
+    // The approved Seer policy (docs/ROLE-SPECIFICATION.md) preserves the
+    // reference's "sneaky wuff" behavior: a Lycan reads as a Villager.
+    const targetAlignment = getRole(target.roleKey)?.roleKey === 'lycan' ? 'village' : target.alignment;
     investigations.push({
       actorPlayerId: action.actorPlayerId,
       targetPlayerId: target.playerId,
-      targetAlignment: target.alignment,
+      targetAlignment: targetAlignment as typeof target.alignment,
     });
   }
 

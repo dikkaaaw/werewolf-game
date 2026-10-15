@@ -28,7 +28,7 @@ export async function POST(
     // 1. Check room exists and is in 'lobby' status
     const { data: room, error: roomError } = await admin
       .from('rooms')
-      .select('id, status')
+      .select('id, status, state_version')
       .eq('id', roomId)
       .single();
 
@@ -67,12 +67,12 @@ export async function POST(
       return badRequest(updateError.message);
     }
 
-    // 4. Update room last_activity and state_version to trigger Realtime listeners
+    // 4. Update room last_activity and bump state_version to trigger Realtime listeners
     await admin
       .from('rooms')
       .update({
         last_activity_at: new Date().toISOString(),
-        state_version: room.status === 'lobby' ? 1 : 2,
+        state_version: (room.state_version ?? 0) + 1,
       })
       .eq('id', roomId);
 

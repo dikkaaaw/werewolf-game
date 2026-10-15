@@ -392,7 +392,7 @@ suite('claim durability', () => {
     const broken = {
       ...admin,
       rpc: async (name: string, args: Row = {}) => {
-        if (name === 'finish_game') {
+        if (name === 'finish_game' || name === 'tick_room') {
           return { data: null, error: { message: 'simulated transient DB failure' } };
         }
         return admin.rpc(name, args);

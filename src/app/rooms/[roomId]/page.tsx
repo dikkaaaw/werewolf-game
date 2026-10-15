@@ -8,12 +8,16 @@ import { GameOverPanel } from '@/components/game/GameOverPanel'
 import { LobbyPanel } from '@/components/game/LobbyPanel'
 import { PlayerRoster } from '@/components/game/PlayerRoster'
 import { RoomChatPanel } from '@/components/game/RoomChatPanel'
+import { VillageTimeline } from '@/components/game/VillageTimeline'
 import { PhaseShell } from '@/components/game/PhaseShell'
 import {
     PhaseAnnouncementLiveRegion,
     PhaseAnnouncementOverlay,
 } from '@/components/game/PhaseAnnouncement'
 import { SecretRoleCard } from '@/components/game/SecretRoleCard'
+import { HunterShotPrompt } from '@/components/game/HunterShotPrompt'
+import { PhaseCountdown } from '@/components/game/PhaseCountdown'
+import type { SettingsPayload } from '@/components/game/LobbySettings'
 import { ToastViewport, useToasts } from '@/components/game/Toast'
 import { nightActionToast, voteCastToast } from '@/lib/game/action-messages'
 import { SETTINGS } from '@/lib/game/settings'
@@ -69,17 +73,13 @@ export default function LobbyPage() {
     // The caller's night action, tagged with the round it belongs to. Tagging it
     // is what makes the lock expire on its own when the round advances, without
     // an effect that would setState during render.
+    const [hunterAction, setHunterAction] = useState<{ deadlineAt: string; targets: Array<{ id: string; displayName: string }> } | null>(null)
     const [myNightAction, setMyNightAction] = useState<{
         round: number | null
         targetPlayerId: string | null
     } | null>(null)
     const [myVoteTargetId, setMyVoteTargetId] = useState<string | null>(null)
     const toasts = useToasts()
-    const [secondsRemaining, setSecondsRemaining] = useState<number | null>(null)
-    const [realtimeStatus, setRealtimeStatus] = useState<
-        'CONNECTING' | 'CONNECTED' | 'DISCONNECTED' | 'CHANNEL_ERROR'
-    >('CONNECTING')
-
     // `room` state survives client-side navigation between rooms, so the secret is
     // only considered current when it was loaded for the room being displayed.
     // This also prevents a stale role from flashing while a new room loads.
@@ -100,14 +100,23 @@ export default function LobbyPage() {
     // `fetchRoomRef`, which keeps effect identities stable regardless.
     const fetchRoom = async (opts?: { force?: boolean }) => {
         if (!roomId) return
+        // Captured so every post-await guard below compares against the room this
+        // call was issued for, not whatever `roomId` holds once the response
+        // lands. Navigating between rooms reuses this component, so a late
+        // response from the previous room used to be applied to the new one.
+        const requestedRoomId = roomId
         try {
             setError(null)
-            const result = await fetchRoomSnapshot(roomId, opts)
+            const result = await fetchRoomSnapshot(requestedRoomId, opts)
+            // The user may have navigated away, signed out, or the cache may have
+            // been invalidated while this request was in flight. Applying it now
+            // would overwrite newer state with a stale snapshot.
+            if (requestedRoomId !== roomId) return
             if (!result.ok) {
                 if (result.status === 401 || result.status === 404) {
                     // Access to this room is gone: drop any cached private role data.
                     dispatchSecretRole({ type: 'access-lost', scope: null })
-                    invalidateRoom(roomId)
+                    invalidateRoom(requestedRoomId)
                 }
                 if (result.status === 401) {
                     setError('Authentication required. Please sign in on the homepage.')
@@ -135,6 +144,17 @@ export default function LobbyPage() {
             // only needs refetching when the authoritative phase/round actually
             // moved — not on every snapshot.
             const prev = roomRef.current
+
+            // Out-of-order guard. `state_version` is bumped by the database on
+            // every mutation, so a snapshot carrying a LOWER version than the one
+            // already on screen is one that was issued earlier and resolved later
+            // — applying it would roll the UI backwards. Equal versions are
+            // allowed: a settings read-back and a realtime event can both describe
+            // the same commit.
+            if (prev && prev.id === data.room.id && data.room.stateVersion < prev.stateVersion) {
+                return
+            }
+
             const phaseMoved =
                 !prev ||
                 prev.status !== data.room.status ||
@@ -176,6 +196,7 @@ export default function LobbyPage() {
                               }
                             : null
                     )
+                    setHunterAction(roleResult.role.hunterAction ?? null)
                 } else if (
                     roleResult.status === 401 ||
                     roleResult.status === 403 ||
@@ -191,6 +212,30 @@ export default function LobbyPage() {
         }
     }
 
+    const [hunterSubmitting, setHunterSubmitting] = useState(false)
+    const handleHunterShot = async (targetPlayerId: string) => {
+        if (!roomId || hunterSubmitting) return
+        setHunterSubmitting(true)
+        try {
+            const res = await fetch(`/api/rooms/${roomId}/hunter-shoot`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ targetPlayerId }),
+            })
+            invalidateRolesForRoom(roomId)
+            if (!res.ok) {
+                const body = await res.json().catch(() => null) as { error?: { message?: string } } | null
+                toasts.notifyError('Hunter shot failed', body?.error?.message ?? 'Please try again.')
+                await fetchRoom({ force: true })
+                return
+            }
+            toasts.notifySuccess('Hunter shot fired', 'The target was eliminated.')
+            await fetchRoom({ force: true })
+        } catch {
+            toasts.notifyError('Hunter shot failed', 'Network error. Please try again.')
+        } finally {
+            setHunterSubmitting(false)
+        }
+    }
+
     const handleToggleReady = async () => {
         if (!roomId || !room || actionLoading !== null) return
         const myPlayer = room.players.find(
@@ -200,6 +245,17 @@ export default function LobbyPage() {
 
         setActionLoading('ready')
         setError(null)
+        // Optimistic UI update: toggle ready state immediately
+        setRoom((prev) => {
+            if (!prev) return prev
+            return {
+                ...prev,
+                players: prev.players.map((p) =>
+                    p.id === myPlayer?.id ? { ...p, isReady: targetReady } : p
+                ),
+            }
+        })
+
         try {
             const res = await fetch(`/api/rooms/${roomId}/ready`, {
                 method: 'POST',
@@ -269,13 +325,39 @@ export default function LobbyPage() {
             const data = await res.json()
             if (!res.ok) {
                 setError(data.error?.message ?? 'Failed to submit night action.')
+                // Re-sync so the roster reflects the authoritative state after a
+                // rejected (or stale) action rather than staying on the intended one.
+                await fetchRoom({ force: true })
             } else {
                 // Only after the server confirms: the toast must never claim success
                 // for an action the server rejected.
-                setMyNightAction({ round: room.roundNumber, targetPlayerId })
+                setMyNightAction({ round: data.roundNumber ?? room.roundNumber, targetPlayerId })
                 const targetPlayer = room.players.find((p) => p.id === targetPlayerId)
                 const copy = nightActionToast(actionType, targetPlayer?.displayName ?? 'target')
                 toasts.notifySuccess(copy.title, copy.description)
+                // The server now holds this action; invalidate the private-role
+                // cache so the post-mutation refresh re-reads it rather than
+                // clobbering myNightAction with a stale null entry.
+                invalidateRolesForRoom(roomId)
+                // Mirror vote handling: force a fresh snapshot so the authoritative
+                // room/vote state and realtime listeners agree with the local lock.
+                await fetchRoom({ force: true })
+                // Explicitly re-read the private role so myNightAction is synced
+                // to the authoritative post-mutation state even if fetchRoom's
+                // phase check considered the room unchanged.
+                if (user?.id) {
+                    const roleRes = await fetchMyRoleSnapshot(roomId, user.id, { force: true })
+                    if (roleRes.ok) {
+                        setMyNightAction(
+                            roleRes.role.nightAction
+                                ? {
+                                      round: data.roundNumber ?? room.roundNumber ?? null,
+                                      targetPlayerId: roleRes.role.nightAction.targetPlayerId,
+                                  }
+                                : null
+                        )
+                    }
+                }
             }
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Network error submitting action.')
@@ -336,6 +418,43 @@ export default function LobbyPage() {
             setActionLoading(null)
         }
     }
+
+    /**
+     * Save the host's lobby settings (phase durations + role composition).
+     *
+     * No optimistic update: the server is the only thing that knows whether the
+     * payload passed validation and the rooms row lock, so the panel keeps the
+     * host's draft and adopts the authoritative values from the forced refresh
+     * that follows a confirmed 200. On failure the draft is left untouched so
+     * the host can correct it rather than losing their input.
+     */
+    const handleSaveSettings = async (payload: SettingsPayload) => {
+        if (!roomId || actionLoading !== null) return
+        setActionLoading('settings')
+        setError(null)
+        try {
+            const res = await fetch(`/api/rooms/${roomId}/settings`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            })
+
+            const data = await res.json()
+            if (!res.ok) {
+                setError(data.error?.message ?? 'Failed to save game settings.')
+                // Re-sync so the panel shows the configuration the room actually
+                // has, rather than the draft that was just rejected.
+                await fetchRoom({ force: true })
+            } else {
+                toasts.notifySuccess('Settings saved', 'Everyone in the lobby will see them.')
+                await fetchRoom({ force: true })
+            }
+        } catch (err) {
+            setError(err instanceof Error ? err.message : 'Network error saving settings.')
+        } finally {
+            setActionLoading(null)
+        }
+    }
     // Stable handle to the latest fetchRoom. Every effect and callback uses
     // this instead of `fetchRoom` itself, so none of them re-subscribe when the
     // component re-renders.
@@ -346,10 +465,7 @@ export default function LobbyPage() {
 
     useEffect(() => {
         if (!roomId || authLoading) return
-        const timer = window.setTimeout(() => {
-            void fetchRoomRef.current()
-        }, 0)
-        return () => window.clearTimeout(timer)
+        void fetchRoomRef.current()
     }, [roomId, authLoading])
 
     // Signing out, or switching accounts, must not leave the previous account's
@@ -380,13 +496,25 @@ export default function LobbyPage() {
     // heartbeat all funnel through here, so simultaneous triggers collapse into
     // a single request rather than racing each other.
     const coalesceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+    // Tracks whether the PENDING coalesced request must bypass the cache. A
+    // plain refresh followed by a forced one used to be collapsed into the
+    // plain one, silently discarding the "hit the server now" intent — which is
+    // exactly what the countdown-expiry and reconnect paths rely on.
+    const coalesceForceRef = useRef(false)
     const requestRefresh = useCallback((options?: { force?: boolean; delayMs?: number }) => {
-        const delay = options?.delayMs ?? 0
-        if (coalesceRef.current !== null) return
+        const force = options?.force === true
+        if (coalesceRef.current !== null) {
+            // Upgrade the pending request rather than dropping the force flag.
+            if (force) coalesceForceRef.current = true
+            return
+        }
+        coalesceForceRef.current = force
         coalesceRef.current = setTimeout(() => {
             coalesceRef.current = null
-            void fetchRoomRef.current(options)
-        }, delay)
+            const pendingForce = coalesceForceRef.current
+            coalesceForceRef.current = false
+            void fetchRoomRef.current(pendingForce ? { force: true } : undefined)
+        }, options?.delayMs ?? 0)
     }, [])
     // Clear a pending refresh when the room changes or the page unmounts, so a
     // stale timer can never fetch a room we have already navigated away from.
@@ -399,44 +527,30 @@ export default function LobbyPage() {
         }
     }, [roomId])
 
-    // Phase countdown and automatic lazy advancement trigger.
-    // The deadline can now cross only ONCE per phase: previously every 1s tick
-    // after expiry issued a snapshot request, and each response replaced `room`,
-    // which recreated the interval and started the loop again.
-    useEffect(() => {
-        if (!room || room.status !== 'in_progress' || !room.phaseEndsAt) {
-            return
-        }
-
-        const phaseEndsAt = room.phaseEndsAt
-        let expiredTriggered = false
-        const updateTimer = () => {
-            const remainingMs = new Date(phaseEndsAt).getTime() - Date.now()
-            const secs = Math.max(0, Math.ceil(remainingMs / 1000))
-            setSecondsRemaining(secs)
-
-            // When the deadline passes, trigger lazy advancement exactly once.
-            if (secs <= 0 && !expiredTriggered) {
-                expiredTriggered = true
-                requestRefresh({ force: true })
-            }
-        }
-
-        updateTimer()
-        const interval = setInterval(updateTimer, 1000)
-        return () => clearInterval(interval)
-    }, [room, requestRefresh])
+    // The countdown itself now lives in <PhaseCountdown />, which owns the 1s
+    // tick. Keeping it here re-rendered the entire room tree every second for a
+    // value that only ever appears in one label. The one-shot expiry trigger is
+    // passed down as `onExpired` and still funnels through the coalescer.
+    const handlePhaseExpired = useCallback(() => {
+        requestRefresh({ force: true })
+    }, [requestRefresh])
 
     // Periodic heartbeat during an in_progress game: the safety net for events
     // Realtime never delivered. It is a fallback, not the primary update path,
     // so it no longer forces a cache bypass on every tick.
+    //
+    // Deps are primitives on purpose. Depending on `room` recreated the interval
+    // on every snapshot — and since a snapshot arrives on every Realtime event,
+    // update traffic faster than 15s starved the heartbeat entirely, removing the
+    // safety net precisely when the room was most active.
+    const isPlayingNow = room?.status === 'in_progress'
     useEffect(() => {
-        if (!room || room.status !== 'in_progress') return
+        if (!isPlayingNow) return
         const pollInterval = setInterval(() => {
             requestRefresh()
         }, 15_000)
         return () => clearInterval(pollInterval)
-    }, [room, requestRefresh])
+    }, [isPlayingNow, requestRefresh])
 
     useEffect(() => {
         if (!roomId || !supabase || authLoading) return
@@ -469,13 +583,10 @@ export default function LobbyPage() {
             )
             .subscribe((status) => {
                 if (status === 'SUBSCRIBED') {
-                    setRealtimeStatus('CONNECTED')
                     // Re-sync once on connect/reconnect to recover anything missed.
                     requestRefresh({ force: true })
                 } else if (status === 'CHANNEL_ERROR') {
-                    setRealtimeStatus('CHANNEL_ERROR')
                 } else if (status === 'TIMED_OUT' || status === 'CLOSED') {
-                    setRealtimeStatus('DISCONNECTED')
                 }
             })
 
@@ -497,12 +608,25 @@ export default function LobbyPage() {
         return () => window.clearTimeout(timer)
     }, [announcementId, announcementDuration])
 
+    // Guarded so a double-click, or an unmount while the timer is live, cannot
+    // leave a stray setState behind. The timer id is tracked rather than left
+    // dangling, which is what every other timer in this file already does.
+    const copiedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+    useEffect(() => {
+        return () => {
+            if (copiedTimerRef.current !== null) clearTimeout(copiedTimerRef.current)
+        }
+    }, [])
     const copyCode = async () => {
         if (!room?.roomCode) return
         try {
             await navigator.clipboard.writeText(room.roomCode)
             setCopied(true)
-            setTimeout(() => setCopied(false), 2000)
+            if (copiedTimerRef.current !== null) clearTimeout(copiedTimerRef.current)
+            copiedTimerRef.current = setTimeout(() => {
+                copiedTimerRef.current = null
+                setCopied(false)
+            }, 2000)
         } catch {
             // Fallback if clipboard API is blocked
         }
@@ -610,6 +734,7 @@ export default function LobbyPage() {
                         onToggleReady={handleToggleReady}
                         onStartGame={handleStartGame}
                         onDevAddBots={handleDevAddBots}
+                        onSaveSettings={handleSaveSettings}
                     />
                 )}
 
@@ -645,13 +770,17 @@ export default function LobbyPage() {
                     progress, which reads as "the game never ended" even though the
                     room had correctly reached `finished`. */}
                 {isPlaying && room && (
-                    <div
-                        className={`grid gap-3 ${
-                            isPlaying ? 'lg:grid-cols-[minmax(0,17rem)_minmax(0,1fr)]' : ''
-                        }`}
-                    >
-                        <div className={isPlaying ? 'lg:col-start-1 lg:row-start-1' : ''}>
+                    <div className="grid gap-3 lg:grid-cols-[18rem_minmax(0,1fr)_20rem]">
+                        <div className="flex flex-col gap-3">
                             {/* Secret role card: independent of the phase theme, own role identity */}
+                            {hunterAction && visibleSecretRole.roleKey === 'hunter' && (
+                                <HunterShotPrompt
+                                    targets={hunterAction.targets}
+                                    deadlineAt={hunterAction.deadlineAt}
+                                    submitting={hunterSubmitting}
+                                    onSelect={handleHunterShot}
+                                />
+                            )}
                             {showRoleCard && (
                                 <SecretRoleCard
                                     roleKey={visibleSecretRole.roleKey}
@@ -661,6 +790,11 @@ export default function LobbyPage() {
                                     theme={theme}
                                 />
                             )}
+                            <VillageTimeline
+                                theme={theme}
+                                events={room.events}
+                                currentPhase={room.phase}
+                            />
                         </div>
 
                         <div
@@ -707,25 +841,12 @@ export default function LobbyPage() {
                                             )}
                                         </div>
 
-                                        {room.status === 'in_progress' &&
-                                            secondsRemaining !== null && (
-                                                <div className="text-right">
-                                                    <p
-                                                        className={`text-[10px] font-bold uppercase tracking-[0.2em] ${theme.eyebrow}`}
-                                                    >
-                                                        Time left
-                                                    </p>
-                                                    <p
-                                                        className={`mt-0.5 font-mono text-3xl font-black tabular-nums leading-none sm:text-4xl ${
-                                                            secondsRemaining <= 10
-                                                                ? theme.accent
-                                                                : theme.text
-                                                        }`}
-                                                    >
-                                                        {secondsRemaining}s
-                                                    </p>
-                                                </div>
-                                            )}
+                                        <PhaseCountdown
+                                            phaseEndsAt={room.phaseEndsAt}
+                                            active={room.status === 'in_progress'}
+                                            theme={theme}
+                                            onExpired={handlePhaseExpired}
+                                        />
                                     </div>
                                 </header>
                             )}
@@ -850,18 +971,16 @@ export default function LobbyPage() {
                             />
                         </div>
 
-                        <div className={isPlaying ? 'lg:col-start-1 lg:row-start-2' : ''} />
-
-                        {isPlaying && (
-                            <div className="lg:col-start-2 lg:row-start-2">
-                                <RoomChatPanel
-                                    theme={theme}
-                                    room={room}
-                                    isSelfAlive={myPlayer?.isAlive ?? false}
-                                    isNight={room.phase === 'night'}
-                                />
-                            </div>
-                        )}
+                        {/* Col 3: Room Chat */}
+                        <div>
+                            <RoomChatPanel
+                                theme={theme}
+                                room={room}
+                                isSelfAlive={myPlayer?.isAlive ?? false}
+                                isNight={room.phase === 'night'}
+                                active={true}
+                            />
+                        </div>
                     </div>
                 )}
             </div>

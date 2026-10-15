@@ -21,7 +21,7 @@ describe('End-to-End Gameplay Loop (Lobby -> Night -> Day -> Vote -> Game Over)'
     expect(config).toEqual([
       { roleKey: 'werewolf', roleCount: 1, config: {} },
       { roleKey: 'seer', roleCount: 1, config: {} },
-      { roleKey: 'doctor', roleCount: 1, config: {} },
+      { roleKey: 'guardian_angel', roleCount: 1, config: {} },
       { roleKey: 'villager', roleCount: 2, config: {} },
     ]);
 
@@ -33,7 +33,7 @@ describe('End-to-End Gameplay Loop (Lobby -> Night -> Day -> Vote -> Game Over)'
     players[1].roleKey = 'seer';
     players[1].alignment = 'village';
 
-    players[2].roleKey = 'doctor';
+    players[2].roleKey = 'guardian_angel';
     players[2].alignment = 'village';
 
     players[3].roleKey = 'villager';
@@ -48,7 +48,7 @@ describe('End-to-End Gameplay Loop (Lobby -> Night -> Day -> Vote -> Game Over)'
     // - Seer (p2) investigates Werewolf (p1)
     const night1Actions: NightAction[] = [
       { actorPlayerId: 'p1', actorRoleKey: 'werewolf', actionType: 'eliminate', targetPlayerId: 'p4' },
-      { actorPlayerId: 'p3', actorRoleKey: 'doctor', actionType: 'protect', targetPlayerId: 'p2' },
+      { actorPlayerId: 'p3', actorRoleKey: 'guardian_angel', actionType: 'protect', targetPlayerId: 'p2' },
       { actorPlayerId: 'p2', actorRoleKey: 'seer', actionType: 'investigate', targetPlayerId: 'p1' },
     ];
 
@@ -107,14 +107,14 @@ describe('End-to-End Gameplay Loop (Lobby -> Night -> Day -> Vote -> Game Over)'
     const players: PlayerState[] = [
       { playerId: 'w1', userId: 'u1', seatNumber: 1, displayName: 'Wolf', isAlive: true, roleKey: 'werewolf', alignment: 'werewolf' },
       { playerId: 'v1', userId: 'u2', seatNumber: 2, displayName: 'Villager', isAlive: true, roleKey: 'villager', alignment: 'village' },
-      { playerId: 'd1', userId: 'u3', seatNumber: 3, displayName: 'Doc', isAlive: true, roleKey: 'doctor', alignment: 'village' },
+      { playerId: 'd1', userId: 'u3', seatNumber: 3, displayName: 'Doc', isAlive: true, roleKey: 'guardian_angel', alignment: 'village' },
       { playerId: 's1', userId: 'u4', seatNumber: 4, displayName: 'Seer', isAlive: true, roleKey: 'seer', alignment: 'village' },
     ];
 
     // Wolf targets Villager v1, Doctor protects v1
     const nightActions: NightAction[] = [
       { actorPlayerId: 'w1', actorRoleKey: 'werewolf', actionType: 'eliminate', targetPlayerId: 'v1' },
-      { actorPlayerId: 'd1', actorRoleKey: 'doctor', actionType: 'protect', targetPlayerId: 'v1' },
+      { actorPlayerId: 'd1', actorRoleKey: 'guardian_angel', actionType: 'protect', targetPlayerId: 'v1' },
     ];
 
     const result = resolveNight({ players, actions: nightActions });

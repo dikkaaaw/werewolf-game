@@ -140,7 +140,7 @@ export function isSecretRoleCurrent(state: SecretRoleCardState, scope: string | 
  * each session, so no colour means anything on its own.
  */
 
-export type SecretRoleEmblem = 'werewolf' | 'seer' | 'doctor' | 'villager'
+export type SecretRoleEmblem = 'werewolf' | 'seer' | 'guardian_angel' | 'villager'
 
 export interface SecretRoleIdentity {
     title: string
@@ -288,11 +288,17 @@ export const SECRET_ROLE_IDENTITY: Record<string, SecretRoleIdentity> = {
         description:
             'Each night inspect one player to learn their alignment. Your visions are visible only to you.',
     },
-    doctor: {
-        title: 'Doctor',
-        emblem: 'doctor',
+    guardian_angel: {
+        title: 'Guardian Angel',
+        emblem: 'guardian_angel',
         description:
             'Each night protect one player. A protected player survives that night’s elimination.',
+    },
+    lycan: {
+        title: 'Lycan',
+        emblem: 'werewolf',
+        description:
+            'You are with the werewolves, but the Seer sees you as a villager.',
     },
     villager: {
         title: 'Villager',

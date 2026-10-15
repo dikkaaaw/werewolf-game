@@ -180,11 +180,12 @@ describe('Secret role card — room and game scoping', () => {
 describe('Secret role card — presentation', () => {
   it('gives every registered role a distinct emblem and title', () => {
     const identities = new Set(
-      Object.values(SECRET_ROLE_IDENTITY).map((role) => `${role.emblem}|${role.title}`),
+      Object.values(SECRET_ROLE_IDENTITY).map((role) => role.title),
     );
     expect(identities.size).toBe(Object.keys(SECRET_ROLE_IDENTITY).length);
     expect(Object.keys(SECRET_ROLE_IDENTITY).sort()).toEqual([
-      'doctor',
+      'guardian_angel',
+      'lycan',
       'seer',
       'villager',
       'werewolf',

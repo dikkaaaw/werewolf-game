@@ -23,7 +23,12 @@ vi.mock('@/lib/supabase/server', () => ({
     from: () => chainRow({ id: 'room-1' }),
   })),
   createAdminClient: vi.fn(() => ({
-    rpc: mockAdminRpc,
+    rpc: (name: string, ...args: unknown[]) => {
+      if (name === 'tick_room') {
+        return Promise.resolve({ data: { ok: true, advanced: false }, error: null });
+      }
+      return mockAdminRpc(name, ...args);
+    },
   })),
 }));
 

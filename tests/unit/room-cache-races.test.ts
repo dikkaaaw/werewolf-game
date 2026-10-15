@@ -164,14 +164,14 @@ describe('room-cache race conditions', () => {
     const older = fetchMyRoleSnapshot('room-1', 'user-a', { force: true });
     const newer = fetchMyRoleSnapshot('room-1', 'user-a', { force: true });
 
-    f.resolveAt(1, { ...role('Alice'), roleKey: 'doctor' });
+    f.resolveAt(1, { ...role('Alice'), roleKey: 'guardian_angel' });
     f.resolveAt(0, { ...role('Alice'), roleKey: 'werewolf' });
 
     await older;
     await newer;
 
     const cached = await fetchMyRoleSnapshot('room-1', 'user-a');
-    expect(cached.ok && cached.role.roleKey).toBe('doctor');
+    expect(cached.ok && cached.role.roleKey).toBe('guardian_angel');
   });
 
   it('does not store a role response that lands after a phase invalidation', async () => {

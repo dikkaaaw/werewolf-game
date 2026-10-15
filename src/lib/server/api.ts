@@ -144,6 +144,15 @@ export function mapEngineError(
     case 'repeat_target_forbidden':
     case 'action_not_supported_by_role':
     case 'player_not_alive':
+    // Settings / role-composition rejections. These are the host submitting a
+    // configuration the engine will not accept, so they are client input
+    // errors (400), not a state conflict (409) — reporting them as 409 made a
+    // mistyped role count look like a race.
+    case 'invalid_settings':
+    case 'invalid_config':
+    case 'role_count_mismatch':
+    case 'unsupported_role':
+    case 'no_werewolf':
       return apiError(400, code, message);
     case 'room_not_in_progress':
     case 'not_night_phase':

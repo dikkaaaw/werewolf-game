@@ -67,6 +67,7 @@ function renderLobby(overrides: Record<string, unknown> = {}): string {
       onToggleReady: vi.fn(),
       onStartGame: vi.fn(),
       onDevAddBots: vi.fn(),
+      onSaveSettings: vi.fn(async () => {}),
       ...overrides,
     }),
   );
