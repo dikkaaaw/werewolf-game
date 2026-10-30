@@ -15,7 +15,7 @@ import {
 } from '@/lib/server/api';
 
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ roomId: string }> },
 ) {
   try {
@@ -33,10 +33,19 @@ export async function GET(
       return notFound();
     }
 
-    const { data: messages, error } = await supabase
+    const url = new URL(request.url);
+    const since = url.searchParams.get('since');
+
+    let query = supabase
       .from('game_chat_messages')
       .select('id, round_number, author_player_id, message, created_at')
-      .eq('room_id', roomId)
+      .eq('room_id', roomId);
+
+    if (since) {
+      query = query.gt('created_at', since);
+    }
+
+    const { data: messages, error } = await query
       .order('created_at', { ascending: true })
       .limit(100);
 

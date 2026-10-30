@@ -20,7 +20,11 @@ Alignment — not role — drives win checking, so adding roles later cannot cha
 | `werewolf` | Werewolf | `werewolf` | `eliminate` | 100 | Night kill, plurality across all living werewolves; **may not target another Werewolf** (§5) |
 | `villager` | Villager | `village` | `null` | — | Discussion + voting only |
 | `seer` | Seer | `village` | `investigate` | 300 | Learns the target's **alignment**; result is private to the seer |
-| `doctor` | Doctor | `village` | `protect` | 200 | Protects target from night elimination; **may not protect another Doctor**, may not protect the same player two nights running (see §5) |
+| `doctor` | Guardian Angel | `village` | `protect` | 200 | Protects target from night elimination; **may not protect another Doctor**, may not protect the same player two nights running (see §5) |
+| `lycan` | Lycan | `werewolf` | `null` | — | A werewolf-team member who reads as a Villager to the Seer. No night action. |
+| `hunter` | Hunter | `village` | `null` | — | No night action. When lynched, the Hunter chooses an alive player to eliminate. |
+| `tanner` | Tanner | `neutral` | `null` | — | Hates life: if the Tanner is lynched, the Tanner wins the game alone. |
+| `mayor` | Mayor | `village` | `null` | — | A revealed Mayor's vote counts double during voting. |
 
 Adding a role = one entry in `src/lib/game/role-registry.ts`. No engine change.
 
@@ -62,9 +66,9 @@ reference's "day 1 == first night" convention.
 
 | Phase | Default |
 | --- | --- |
-| night | 60 s |
-| day (discussion) | 90 s |
-| voting | 60 s |
+| night | 10 s |
+| day (discussion) | 10 s |
+| voting | 10 s |
 
 ## 5. Night phase
 
@@ -149,7 +153,10 @@ The resolver returns three disjoint buckets:
   in place. One active vote per player per round, never two.
 - Votes are **readable by all room members** (that is what "open" means), and targets must be in
   the same room.
-- Resolution: plurality of `count(target_player_id)`.
+- Resolution: plurality of the vote total.
+  - Every vote counts once, except a revealed Mayor, whose vote counts **twice**.
+    The total is what `src/lib/game/vote-resolution.ts` computes and what
+    `tick_room` computes, so both must agree.
   - `max == 0` or no rows → nobody eliminated.
   - exactly one target at max → eliminated, `kill_cause = 'vote_elimination'`.
   - tie → **nobody is eliminated**. This is the only MVP behaviour.
@@ -261,5 +268,24 @@ deliberate: an option that silently does nothing is worse than no option.
 ## 13. What is deliberately out of scope
 
 Not implemented in the MVP, by design: voice/video chat, spectators, lovers, serial killer,
-cult, arsonist, hunter/gunner mayor-double-vote, idle-kill for AFK players, role conversion or
-role mutation mid-game, early phase exit when all actions are submitted.
+cult, arsonist, idle-kill for AFK players, role conversion or role mutation mid-game, early
+phase exit when all actions are submitted.
+
+## 14. Edge-Case Behaviors & Specifications (MVP vs Backlog)
+
+### A. New player joins during `in_progress`
+- **New Player (unregistered):** Strictly rejected with HTTP 409 `room_in_progress` ("That game has already started."). Spectator mode is out-of-scope for MVP (Backlog P2).
+- **Existing Player (reconnecting):** Supported via migration `0034_allow_seat_reclaim_on_join`. Players entering the correct room code with their registered Nickname + PIN seamlessly reclaim their seat, alive status, and secret role.
+
+### B. Vote tie / No majority
+- Handled authoritatively by PostgreSQL `tick_room` plurality check:
+  If the top two candidates have equal votes (`v_vote_count = v_second_vote_count`), or if no votes were cast at all, **no player is lynched**. The village takes no casualty and advances straight to Night.
+
+### C. Host leaves mid-game
+- Because phase transitions are driven autonomously by `pg_cron` (5-second scheduler), the game **does not freeze** if the host disconnects or leaves.
+- Automatic host migration to seat 2 is deferred (Backlog P1). The original host can reclaim seat #1 at any time using their credentials.
+
+### D. Chat during Night Phase & Wolf Pack Channel
+- **Village Chat at Night:** Completely disabled and locked by `/api/rooms/[roomId]/chat` (returns HTTP 403 "The village is asleep.").
+- **Dedicated Werewolf Night Chat:** Not present in MVP (wolves coordinate exclusively through real-time plurality targeting on the roster; Backlog P2).
+

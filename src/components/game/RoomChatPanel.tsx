@@ -24,6 +24,15 @@ export interface RoomChatPanelProps {
     onSendMessage?: (msg: ChatMessage) => void
 }
 
+function mergeChatMessages(existing: ChatMessage[], incoming: ChatMessage[]): ChatMessage[] {
+    const map = new Map<string, ChatMessage>()
+    for (const m of existing) map.set(m.id, m)
+    for (const m of incoming) map.set(m.id, m)
+    return Array.from(map.values()).sort(
+        (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+    )
+}
+
 /**
  * Interactive room chat box for village discussion during day/voting phases.
  * When `active` is false, it maintains the static preview matching test scaffolding.
@@ -39,19 +48,25 @@ export function RoomChatPanel({
     onSendMessage,
 }: RoomChatPanelProps) {
     const [messages, setMessages] = useState<ChatMessage[]>([])
+    const lastChatSyncAtRef = useRef<string | null>(null)
     const [draft, setDraft] = useState('')
     const [sending, setSending] = useState(false)
     const [error, setError] = useState<string | null>(null)
     const scrollRef = useRef<HTMLDivElement>(null)
 
-    // Append incoming broadcast messages instantly
+    // Update lastChatSyncAtRef whenever messages change
+    useEffect(() => {
+        if (messages.length > 0) {
+            const latest = messages[messages.length - 1].created_at
+            lastChatSyncAtRef.current = latest
+        }
+    }, [messages])
+
+    // Append incoming broadcast messages instantly (with deduplication)
     useEffect(() => {
         if (!incomingMessage) return
         // eslint-disable-next-line react-hooks/set-state-in-effect
-        setMessages((prev) => {
-            if (prev.some((m) => m.id === incomingMessage.id)) return prev
-            return [...prev, incomingMessage]
-        })
+        setMessages((prev) => mergeChatMessages(prev, [incomingMessage]))
     }, [incomingMessage])
 
     const unavailableReason = !isSelfAlive
@@ -62,26 +77,36 @@ export function RoomChatPanel({
 
     const canSend = active && isSelfAlive && !isNight && !sending && draft.trim().length > 0
 
-    // Fetch messages periodically or on phase change when active
+    // Fetch messages periodically or on phase change / reconnect catch-up when active
     useEffect(() => {
         if (!active || room.status !== 'in_progress') return
 
         let mounted = true
-        async function fetchMessages() {
+        async function fetchMessages(since?: string | null) {
             try {
-                const res = await fetch(`/api/rooms/${room.id}/chat`)
+                const query = since ? `?since=${encodeURIComponent(since)}` : ''
+                const res = await fetch(`/api/rooms/${room.id}/chat${query}`)
                 if (!res.ok) return
                 const data = await res.json()
-                if (mounted && Array.isArray(data.messages)) {
-                    setMessages(data.messages)
+                if (mounted && Array.isArray(data.messages) && data.messages.length > 0) {
+                    setMessages((prev) => mergeChatMessages(prev, data.messages))
                 }
             } catch {
                 // Ignore transient network errors
             }
         }
 
-        fetchMessages()
-        const interval = setInterval(fetchMessages, 4000)
+        // Initial full fetch on mount/phase change, catch-up fetch on refreshTrigger
+        if (lastChatSyncAtRef.current && refreshTrigger) {
+            fetchMessages(lastChatSyncAtRef.current)
+        } else {
+            fetchMessages()
+        }
+
+        const interval = setInterval(() => {
+            fetchMessages(lastChatSyncAtRef.current)
+        }, 4000)
+
         return () => {
             mounted = false
             clearInterval(interval)

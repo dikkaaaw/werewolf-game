@@ -90,7 +90,7 @@ export default function LobbyPage() {
                     : `${Date.now()}-${Math.random().toString(36).slice(2)}`
         }
     }, [])
-    const [lastSyncTimestamp, setLastSyncTimestamp] = useState<number>(0)
+    const [lastRoomSyncAt, setLastRoomSyncAt] = useState<number>(0)
     const [incomingChat, setIncomingChat] = useState<ChatMessage | null>(null)
     const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
     const [realtimeStatus, setRealtimeStatus] = useState<string>('DISCONNECTED')
@@ -220,11 +220,11 @@ export default function LobbyPage() {
                     dispatchSecretRole({ type: 'access-lost', scope: nextScope })
                 }
             }
-            // Item 4: Gunakan timestamp server dari updatedAt room, bukan Date.now() klien
-            const serverSyncTime = result.room.updatedAt
+            // Pisahkan state sync: lastRoomSyncAt dari rooms.updatedAt
+            const serverRoomTime = result.room.updatedAt
                 ? new Date(result.room.updatedAt).getTime()
                 : Date.now()
-            setLastSyncTimestamp(serverSyncTime)
+            setLastRoomSyncAt(serverRoomTime)
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Network error loading room.')
         } finally {
@@ -1133,7 +1133,7 @@ export default function LobbyPage() {
                                 isNight={room.phase === 'night'}
                                 active={true}
                                 incomingMessage={incomingChat}
-                                refreshTrigger={lastSyncTimestamp}
+                                refreshTrigger={lastRoomSyncAt}
                                 onSendMessage={broadcastChatMessage}
                             />
                         </div>
