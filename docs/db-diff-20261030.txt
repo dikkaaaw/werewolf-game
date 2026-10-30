@@ -2,9 +2,9 @@
 # Generated: 2026-10-30
 
 Target Database: https://xaspxauazgnzauzfiuje.supabase.co
-Linked Status: Synced
+Linked Status: Synced (38 Migrations Total)
 
-Active Migrations:
+Active Migrations (0001 - 0038):
 0001_schema
 0002_rls
 0003_functions
@@ -42,5 +42,6 @@ Active Migrations:
 0035_player_credentials_auth
 0036_system_health
 0037_realtime_private_channels
+0038_host_migration
 
 Result: Schema is 100% up to date. Diff is clean (empty).

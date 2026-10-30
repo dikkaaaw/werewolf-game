@@ -15,6 +15,8 @@ Desain transisi sempat memakai kombinasi hash deterministik SHA-256(nickname + p
    - Rate limit IP request mandiri (tidak terpengaruh oleh `DISABLE_RATE_LIMIT`).
    - Exponential backoff per akun di level database (`failed_attempts` → `locked_until = now() + (2^n) seconds`), maks 30 menit.
 4. **Session Issuance:**
-   Menggunakan Supabase Auth standar (`signInWithPassword`) dengan kata sandi acak internal sementara (ephemeral), yang otomatis menulis cookie sesi browser `@supabase/ssr`.
-5. **Privasi & Keamanan:**
+   Menggunakan Supabase Auth standar (`signInWithPassword`) dengan kata sandi acak internal sementara (ephemeral), yang dirotasi secara kriptografis (`randomBytes(24)`) pada setiap login sukses. Password tidak pernah disimpan dalam bentuk plaintext.
+5. **Mitigasi Lockout DoS:**
+   Penyerang yang mencoba melakukan lock akun korban dengan salah memasukkan PIN berulang kali akan terblokir oleh rate-limiter per-IP (`auth_ip:${clientIp}`, limit 15 req/menit) sebelum sempat mengunci akun sah korban dari IP berbeda.
+6. **Privasi & Keamanan:**
    Tabel `player_credentials` memiliki RLS terkunci penuh (0 policy untuk `anon`/`authenticated`, hanya dapat diakses melalui RPC `SECURITY DEFINER` oleh `service_role`). Tidak ada log di server maupun client yang mencetak PIN atau UUID mentah.

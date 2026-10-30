@@ -23,7 +23,7 @@ describe('GET /api/health', () => {
         db: 'connected',
         cron_last_run: '2026-10-30T12:00:00Z',
         cron_status: 'succeeded',
-        migrations_count: 36,
+        migrations_count: 38,
       },
       error: null,
     });
@@ -32,24 +32,41 @@ describe('GET /api/health', () => {
     });
   });
 
-  it('returns 200 with full health metrics when services are operational', async () => {
-    const res = await healthHandler();
+  it('returns safe public health info when called without secret header', async () => {
+    const res = await healthHandler(new Request('http://localhost/api/health'));
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.ok).toBe(true);
     expect(body.db).toBe('connected');
-    expect(body.cron_last_run).toBe('2026-10-30T12:00:00Z');
-    expect(body.migrations_count).toBe(36);
-    expect(body.realtime_channel_alive).toBe(true);
-    expect(body.realtime_mode).toBe('broadcast_presence');
+    expect(body.status).toBe('healthy');
+    // Internal audit metrics are hidden from unauthenticated callers
+    expect(body.cron_last_run).toBeUndefined();
+    expect(body.migrations_count).toBeUndefined();
   });
 
-  it('handles database RPC errors gracefully with 500', async () => {
-    mockAdminRpc.mockResolvedValue({
-      data: null,
-      error: { message: 'connection timeout' },
+  it('returns full health metrics when called with valid health secret', async () => {
+    process.env.HEALTH_SECRET = 'my-secret-token';
+    const res = await healthHandler(
+      new Request('http://localhost/api/health', {
+        headers: { 'x-health-secret': 'my-secret-token' },
+      }),
+    );
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.ok).toBe(true);
+    expect(body.cron_last_run).toBe('2026-10-30T12:00:00Z');
+    expect(body.migrations_count).toBe(38);
+    delete process.env.HEALTH_SECRET;
+  });
+
+  it('returns 503 degraded when database ping fails without secret header', async () => {
+    mockAdminFrom.mockReturnValue({
+      select: vi.fn().mockResolvedValue({ data: null, error: new Error('DB connection refused') }),
     });
-    const res = await healthHandler();
-    expect(res.status).toBe(500);
+    const res = await healthHandler(new Request('http://localhost/api/health'));
+    expect(res.status).toBe(503);
+    const body = await res.json();
+    expect(body.ok).toBe(false);
+    expect(body.status).toBe('degraded');
   });
 });

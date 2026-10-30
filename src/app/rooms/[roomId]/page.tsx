@@ -232,13 +232,17 @@ export default function LobbyPage() {
         }
     }
 
-    const broadcastUpdate = useCallback((reason: string) => {
+    const broadcastUpdate = useCallback((reason: string, stateVersion?: number) => {
         if (channelRef.current) {
             const start = Date.now()
             channelRef.current.send({
                 type: 'broadcast',
                 event: 'room_updated',
-                payload: { reason, timestamp: start },
+                payload: {
+                    reason,
+                    stateVersion: stateVersion ?? roomRef.current?.stateVersion,
+                    timestamp: start,
+                },
             }).then((resp) => {
                 const latencyMs = Date.now() - start
                 const isOk = resp === 'ok'
@@ -655,7 +659,15 @@ export default function LobbyPage() {
                     },
                 },
             })
-            .on('broadcast', { event: 'room_updated' }, () => {
+            .on('broadcast', { event: 'room_updated' }, ({ payload }) => {
+                // Item 12: Skip re-fetch jika versi room sudah identik
+                if (
+                    payload?.stateVersion !== undefined &&
+                    roomRef.current?.stateVersion !== undefined &&
+                    payload.stateVersion === roomRef.current.stateVersion
+                ) {
+                    return
+                }
                 requestRefresh({ force: true })
             })
             .on('broadcast', { event: 'chat_message' }, ({ payload }) => {
