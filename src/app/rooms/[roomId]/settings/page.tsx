@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
 
@@ -48,33 +48,25 @@ export default function RoomSettingsPage() {
         void loadRoom()
     }, [authLoading, user, roomId, loadRoom, router])
 
+    const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
+
     useEffect(() => {
         const id = roomId
         if (!id || !supabase || authLoading || !user) return
 
         const channel = supabase
-            .channel(`settings:${id}`)
-            .on(
-                'postgres_changes',
-                { event: '*', schema: 'public', table: 'rooms', filter: `id=eq.${id}` },
-                () => {
-                    void fetchRoomSnapshot(id, { force: true }).then((result) => {
-                        if (result.ok) setRoom(result.room)
-                    })
-                },
-            )
-            .on(
-                'postgres_changes',
-                { event: '*', schema: 'public', table: 'room_players', filter: `room_id=eq.${id}` },
-                () => {
-                    void fetchRoomSnapshot(id, { force: true }).then((result) => {
-                        if (result.ok) setRoom(result.room)
-                    })
-                },
-            )
+            .channel(`room:${id}`)
+            .on('broadcast', { event: 'room_updated' }, () => {
+                void fetchRoomSnapshot(id, { force: true }).then((result) => {
+                    if (result.ok) setRoom(result.room)
+                })
+            })
             .subscribe()
 
+        channelRef.current = channel
+
         return () => {
+            channelRef.current = null
             supabase.removeChannel(channel)
         }
     }, [roomId, supabase, authLoading, user])
@@ -98,6 +90,13 @@ export default function RoomSettingsPage() {
 
         invalidateRoom(roomId)
         clearAllCaches()
+        if (channelRef.current) {
+            channelRef.current.send({
+                type: 'broadcast',
+                event: 'room_updated',
+                payload: { reason: 'settings_saved', timestamp: Date.now() },
+            })
+        }
         await loadRoom()
     }
 

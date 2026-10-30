@@ -20,6 +20,7 @@ export interface PlayerRosterProps {
   hasActedThisRound: boolean
   myVoteTargetId: string | null
   actionLoading: string | null
+  onlineUserIds?: Set<string>
   onNightAction: (playerId: string, actionType: NightActionType) => void
   onCastVote: (playerId: string) => void
 }
@@ -56,6 +57,7 @@ export function PlayerRoster({
   hasActedThisRound,
   myVoteTargetId,
   actionLoading,
+  onlineUserIds,
   onNightAction,
   onCastVote,
 }: PlayerRosterProps) {
@@ -138,6 +140,17 @@ export function PlayerRoster({
 
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-1.5">
+                  {onlineUserIds !== undefined && (
+                    <span
+                      aria-label={player.userId && onlineUserIds.has(player.userId) ? 'Online' : 'Offline'}
+                      className={`inline-block h-2 w-2 rounded-full shrink-0 ${
+                        player.userId && onlineUserIds.has(player.userId)
+                          ? 'bg-emerald-400 ring-2 ring-emerald-500/30'
+                          : 'bg-zinc-600'
+                      }`}
+                      title={player.userId && onlineUserIds.has(player.userId) ? 'Online' : 'Offline'}
+                    />
+                  )}
                   <span
                     className={`truncate text-sm font-semibold ${
                       player.isAlive ? theme.text : `line-through ${theme.textFaint}`

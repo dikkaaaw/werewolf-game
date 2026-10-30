@@ -22,6 +22,7 @@ export interface LobbyPanelProps {
     copied: boolean
     busyKey: string | null
     currentUserId: string | undefined
+    onlineUserIds?: Set<string>
     onCopyCode: () => void
     onToggleReady: () => void
     onStartGame: () => void
@@ -52,6 +53,7 @@ export function LobbyPanel({
     copied,
     busyKey,
     currentUserId,
+    onlineUserIds,
     onCopyCode,
     onToggleReady,
     onStartGame,
@@ -184,6 +186,7 @@ export function LobbyPanel({
                                 theme={theme}
                                 isSelf={isSameUser(player, currentUserId)}
                                 isHostSeat={isSameUser(player, room.hostUserId)}
+                                isOnline={onlineUserIds && player.userId ? onlineUserIds.has(player.userId) : undefined}
                             />
                         ))}
                     </ul>
@@ -289,11 +292,13 @@ function PlayerCard({
     theme,
     isSelf,
     isHostSeat,
+    isOnline,
 }: {
     player: SafePlayer
     theme: PhaseTheme
     isSelf: boolean
     isHostSeat: boolean
+    isOnline?: boolean
 }) {
     const isReady = player.isReady ?? false
     return (
@@ -313,6 +318,17 @@ function PlayerCard({
 
             <span className="min-w-0 flex-1">
                 <span className={`flex items-center gap-1.5`}>
+                    {isOnline !== undefined && (
+                        <span
+                            aria-label={isOnline ? 'Online' : 'Offline'}
+                            className={`inline-block h-2 w-2 rounded-full shrink-0 ${
+                                isOnline
+                                    ? 'bg-emerald-400 ring-2 ring-emerald-500/30'
+                                    : 'bg-zinc-600'
+                            }`}
+                            title={isOnline ? 'Online' : 'Offline'}
+                        />
+                    )}
                     <span className={`truncate text-sm font-semibold ${theme.text}`}>
                         {player.displayName}
                     </span>

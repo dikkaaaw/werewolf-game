@@ -79,6 +79,9 @@ export default function LobbyPage() {
         targetPlayerId: string | null
     } | null>(null)
     const [myVoteTargetId, setMyVoteTargetId] = useState<string | null>(null)
+    const [onlineUsers, setOnlineUsers] = useState<Set<string>>(new Set())
+    const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
+    const [realtimeStatus, setRealtimeStatus] = useState<string>('DISCONNECTED')
     const toasts = useToasts()
     // `room` state survives client-side navigation between rooms, so the secret is
     // only considered current when it was loaded for the room being displayed.
@@ -212,6 +215,16 @@ export default function LobbyPage() {
         }
     }
 
+    const broadcastUpdate = useCallback((reason: string) => {
+        if (channelRef.current) {
+            channelRef.current.send({
+                type: 'broadcast',
+                event: 'room_updated',
+                payload: { reason, timestamp: Date.now() },
+            })
+        }
+    }, [])
+
     const [hunterSubmitting, setHunterSubmitting] = useState(false)
     const handleHunterShot = async (targetPlayerId: string) => {
         if (!roomId || hunterSubmitting) return
@@ -229,6 +242,7 @@ export default function LobbyPage() {
             }
             toasts.notifySuccess('Hunter shot fired', 'The target was eliminated.')
             await fetchRoom({ force: true })
+            broadcastUpdate('hunter_shot')
         } catch {
             toasts.notifyError('Hunter shot failed', 'Network error. Please try again.')
         } finally {
@@ -270,6 +284,7 @@ export default function LobbyPage() {
                 await fetchRoom({ force: true })
             } else {
                 await fetchRoom({ force: true })
+                broadcastUpdate('ready')
             }
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Network error updating ready state.')
@@ -297,6 +312,7 @@ export default function LobbyPage() {
                 // fetchRoom detects the lobby -> in_progress transition and
                 // force-refetches the private role, so no extra call is needed.
                 await fetchRoom({ force: true })
+                broadcastUpdate('start_game')
             }
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Network error starting game.')
@@ -358,6 +374,7 @@ export default function LobbyPage() {
                         )
                     }
                 }
+                broadcastUpdate('night_action')
             }
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Network error submitting action.')
@@ -388,6 +405,7 @@ export default function LobbyPage() {
                 const copy = voteCastToast(targetPlayer?.displayName ?? 'target')
                 toasts.notifySuccess(copy.title, copy.description)
                 await fetchRoom({ force: true })
+                broadcastUpdate('vote')
             }
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Network error casting vote.')
@@ -411,6 +429,7 @@ export default function LobbyPage() {
                 setError(data.error?.message ?? 'Failed to add test bots.')
             } else {
                 await fetchRoom({ force: true })
+                broadcastUpdate('dev_bots')
             }
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Network error adding bots.')
@@ -448,6 +467,7 @@ export default function LobbyPage() {
             } else {
                 toasts.notifySuccess('Settings saved', 'Everyone in the lobby will see them.')
                 await fetchRoom({ force: true })
+                broadcastUpdate('settings')
             }
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Network error saving settings.')
@@ -556,44 +576,52 @@ export default function LobbyPage() {
         if (!roomId || !supabase || authLoading) return
 
         const channel = supabase
-            .channel(`lobby:${roomId}`)
-            .on(
-                'postgres_changes',
-                {
-                    event: '*',
-                    schema: 'public',
-                    table: 'room_players',
-                    filter: `room_id=eq.${roomId}`,
+            .channel(`room:${roomId}`, {
+                config: {
+                    presence: {
+                        key: user?.id ?? undefined,
+                    },
                 },
-                () => {
-                    requestRefresh()
+            })
+            .on('broadcast', { event: 'room_updated' }, () => {
+                requestRefresh({ force: true })
+            })
+            .on('presence', { event: 'sync' }, () => {
+                const state = channel.presenceState()
+                const ids = new Set<string>()
+                for (const presences of Object.values(state)) {
+                    for (const p of presences as Array<{ userId?: string }>) {
+                        if (p.userId) ids.add(p.userId)
+                    }
                 }
-            )
-            .on(
-                'postgres_changes',
-                {
-                    event: '*',
-                    schema: 'public',
-                    table: 'rooms',
-                    filter: `id=eq.${roomId}`,
-                },
-                () => {
-                    requestRefresh()
-                }
-            )
-            .subscribe((status) => {
+                setOnlineUsers(ids)
+            })
+            .subscribe(async (status) => {
+                setRealtimeStatus(status)
                 if (status === 'SUBSCRIBED') {
-                    // Re-sync once on connect/reconnect to recover anything missed.
+                    if (user?.id) {
+                        await channel.track({
+                            userId: user.id,
+                            onlineAt: new Date().toISOString(),
+                        })
+                    }
+                    // Notify other peers so they refresh immediately when a peer joins
+                    channel.send({
+                        type: 'broadcast',
+                        event: 'room_updated',
+                        payload: { reason: 'presence_joined', timestamp: Date.now() },
+                    })
                     requestRefresh({ force: true })
-                } else if (status === 'CHANNEL_ERROR') {
-                } else if (status === 'TIMED_OUT' || status === 'CLOSED') {
                 }
             })
 
+        channelRef.current = channel
+
         return () => {
+            channelRef.current = null
             supabase.removeChannel(channel)
         }
-    }, [roomId, supabase, authLoading, requestRefresh])
+    }, [roomId, supabase, authLoading, user?.id, requestRefresh])
 
     // Auto-dismiss the phase announcement. Guarded on the announcement id so a
     // stale timer can never clear a banner that was minted after it.
@@ -730,6 +758,7 @@ export default function LobbyPage() {
                         copied={copied}
                         busyKey={actionLoading}
                         currentUserId={user?.id}
+                        onlineUserIds={onlineUsers}
                         onCopyCode={copyCode}
                         onToggleReady={handleToggleReady}
                         onStartGame={handleStartGame}
@@ -920,22 +949,22 @@ export default function LobbyPage() {
                                         </span>
                                     )}
 
-                                    {/* <span
-                                title={`Connection: ${realtimeStatus}`}
-                                className={`inline-flex items-center gap-1.5 text-[10px] font-medium ${theme.textFaint}`}
-                            >
-                                <span
-                                    aria-hidden="true"
-                                    className={`h-2 w-2 rounded-full ${
-                                        realtimeStatus === 'CONNECTED'
-                                            ? 'bg-emerald-400'
-                                            : realtimeStatus === 'CONNECTING'
-                                              ? 'bg-amber-400 animate-pulse motion-reduce:animate-none'
-                                              : 'bg-rose-400'
-                                    }`}
-                                />
-                                <span className="hidden sm:inline">{realtimeStatus.toLowerCase()}</span>
-                            </span> */}
+                                    <span
+                                        title={`Connection: ${realtimeStatus}`}
+                                        className={`inline-flex items-center gap-1.5 text-[10px] font-medium ${theme.textFaint}`}
+                                    >
+                                        <span
+                                            aria-hidden="true"
+                                            className={`h-2 w-2 rounded-full ${
+                                                realtimeStatus === 'SUBSCRIBED'
+                                                    ? 'bg-emerald-400'
+                                                    : realtimeStatus === 'CONNECTING'
+                                                      ? 'bg-amber-400 animate-pulse motion-reduce:animate-none'
+                                                      : 'bg-rose-400'
+                                            }`}
+                                        />
+                                        <span className="hidden sm:inline">{realtimeStatus.toLowerCase()}</span>
+                                    </span>
 
                                     {/* <button
                                 type="button"
@@ -966,6 +995,7 @@ export default function LobbyPage() {
                                 hasActedThisRound={hasActedThisRound}
                                 myVoteTargetId={currentVoteTargetId}
                                 actionLoading={actionLoading}
+                                onlineUserIds={onlineUsers}
                                 onNightAction={handleNightAction}
                                 onCastVote={handleCastVote}
                             />
