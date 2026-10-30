@@ -8,12 +8,14 @@
 #
 #   STAGING_URL=https://your-app.vercel.app \
 #   SCHEDULER_SECRET=... \
+#   VERCEL_AUTOMATION_BYPASS_SECRET=... \
 #   ./scripts/cron-advance.sh
 #
 # Env:
-#   STAGING_URL       base URL of the deployed app (required)
-#   SCHEDULER_SECRET  same secret configured on the server (required)
-#   INTERVAL_SECONDS  loop interval, default 5
+#   STAGING_URL                     base URL of the deployed app (required)
+#   SCHEDULER_SECRET                same secret configured on the server (required)
+#   VERCEL_AUTOMATION_BYPASS_SECRET optional; required for Vercel-protected deployments
+#   INTERVAL_SECONDS                loop interval, default 5
 # ---------------------------------------------------------------------------
 set -euo pipefail
 
@@ -22,6 +24,10 @@ set -euo pipefail
 INTERVAL_SECONDS="${INTERVAL_SECONDS:-5}"
 
 endpoint="${STAGING_URL%/}/api/cron/advance"
+bypass_header=()
+if [[ -n "${VERCEL_AUTOMATION_BYPASS_SECRET:-}" ]]; then
+  bypass_header=(-H "x-vercel-protection-bypass: ${VERCEL_AUTOMATION_BYPASS_SECRET}")
+fi
 
 echo "→ advancing phases every ${INTERVAL_SECONDS}s at ${endpoint}"
 
@@ -31,6 +37,7 @@ while true; do
   if ! curl -sS --max-time 10 --fail \
       -X POST \
       -H "Authorization: Bearer ${SCHEDULER_SECRET}" \
+      "${bypass_header[@]}" \
       -H "Content-Type: application/json" \
       -d '{}' \
       "${endpoint}"; then

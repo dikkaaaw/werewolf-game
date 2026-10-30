@@ -100,10 +100,14 @@ Run `scripts/cron-advance.sh` on any always-on box (or a container):
 ```bash
 STAGING_URL=https://your-app.vercel.app \
 SCHEDULER_SECRET=... \
+VERCEL_AUTOMATION_BYPASS_SECRET=... \
 ./scripts/cron-advance.sh
 ```
 
-It POSTs every 5 seconds and prints the JSON summary.
+It POSTs every 5 seconds and prints the JSON summary. Omit
+`VERCEL_AUTOMATION_BYPASS_SECRET` only when the deployment is not protected by
+Vercel Authentication. Generate that secret in Vercel's Deployment Protection
+settings and keep it only in the scheduler host's secret store.
 
 ### Option B — Supabase `pg_cron` (1-minute granularity)
 
