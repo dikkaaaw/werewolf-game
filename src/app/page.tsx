@@ -6,11 +6,22 @@ import { useAuth } from '@/components/auth/AuthProvider'
 import { roomEntryAvailability } from '@/lib/game/room-entry'
 
 function HomeContent() {
-    const { user, loading: authLoading, signIn } = useAuth()
+    const { user, loading: authLoading } = useAuth()
     const router = useRouter()
     const searchParams = useSearchParams()
 
-    const [displayName, setDisplayName] = useState('')
+    const [displayName, setDisplayName] = useState(() => {
+        if (typeof window !== 'undefined') {
+            return localStorage.getItem('ww_nickname') ?? ''
+        }
+        return ''
+    })
+    const [pin, setPin] = useState(() => {
+        if (typeof window !== 'undefined') {
+            return localStorage.getItem('ww_pin') ?? ''
+        }
+        return ''
+    })
     const [roomCode, setRoomCode] = useState(() => {
         return (searchParams.get('code') ?? '').trim().toUpperCase()
     })
@@ -30,12 +41,42 @@ function HomeContent() {
         return null
     }
 
+    const validatePin = (p: string): string | null => {
+        const trimmed = p.trim()
+        if (trimmed.length < 6) return 'PIN must be at least 6 digits/characters to secure your seat.'
+        if (trimmed.length > 32) return 'PIN is too long (max 32 characters).'
+        return null
+    }
+
     const validateCode = (code: string): string | null => {
         const trimmed = code.trim().toUpperCase()
         if (!/^[A-Z0-9]{6}$/.test(trimmed)) {
             return 'Room code must be exactly 6 letters/numbers.'
         }
         return null
+    }
+
+    const authenticatePlayer = async (): Promise<boolean> => {
+        const authRes = await fetch('/api/auth/nickname-pin', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                nickname: displayName.trim(),
+                pin: pin.trim(),
+            }),
+        })
+
+        const authData = await authRes.json().catch(() => null)
+        if (!authRes.ok) {
+            setError(authData?.error?.message ?? 'Failed to authenticate player.')
+            return false
+        }
+
+        if (typeof window !== 'undefined') {
+            localStorage.setItem('ww_nickname', displayName.trim())
+            localStorage.setItem('ww_pin', pin.trim())
+        }
+        return true
     }
 
     const handleCreateRoom = async (e: React.FormEvent) => {
@@ -48,11 +89,16 @@ function HomeContent() {
             return
         }
 
+        const pinError = validatePin(pin)
+        if (pinError) {
+            setError(pinError)
+            return
+        }
+
         setActionLoading('create')
         try {
-            if (!user) {
-                await signIn()
-            }
+            const authOk = await authenticatePlayer()
+            if (!authOk) return
 
             const res = await fetch('/api/rooms', {
                 method: 'POST',
@@ -91,6 +137,12 @@ function HomeContent() {
             return
         }
 
+        const pinError = validatePin(pin)
+        if (pinError) {
+            setError(pinError)
+            return
+        }
+
         const codeError = validateCode(roomCode)
         if (codeError) {
             setError(codeError)
@@ -99,9 +151,8 @@ function HomeContent() {
 
         setActionLoading('join')
         try {
-            if (!user) {
-                await signIn()
-            }
+            const authOk = await authenticatePlayer()
+            if (!authOk) return
 
             const res = await fetch('/api/rooms/join', {
                 method: 'POST',
@@ -150,22 +201,14 @@ function HomeContent() {
                         {authLoading ? (
                             <span className="flex items-center gap-1.5 text-gray-400">
                                 <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
-                                Connecting anonymous session...
+                                Memeriksa sesi...
                             </span>
                         ) : user ? (
                             <span className="flex items-center gap-1.5 text-emerald-400 bg-emerald-950/40 px-2.5 py-1 rounded border border-emerald-900">
                                 <span className="w-2 h-2 rounded-full bg-emerald-400" />
-                                Anonymous session active
+                                Nickname & PIN session active
                             </span>
-                        ) : (
-                            <button
-                                type="button"
-                                onClick={() => signIn()}
-                                className="text-indigo-400 hover:text-indigo-300 underline"
-                            >
-                                Sign in anonymously
-                            </button>
-                        )}
+                        ) : null}
                     </div>
                 </div>
 
@@ -179,12 +222,12 @@ function HomeContent() {
                     )}
 
                     {/* Display Name Input (Shared) */}
-                    <div className="mb-6">
+                    <div className="mb-4">
                         <label
                             htmlFor="displayName"
                             className="block text-sm font-semibold text-gray-300 mb-2"
                         >
-                            Your Display Name
+                            Your Display Name / Nickname
                         </label>
                         <input
                             id="displayName"
@@ -192,12 +235,32 @@ function HomeContent() {
                             value={displayName}
                             onChange={(e) => setDisplayName(e.target.value)}
                             placeholder="e.g. Detective Holmes"
-                            maxLength={10}
+                            maxLength={24}
                             disabled={actionLoading !== null}
                             className="w-full bg-[#0b0f19] border border-gray-700 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-lg px-4 py-3 text-white placeholder-gray-500 text-sm outline-none transition disabled:opacity-50"
                         />
+                    </div>
+
+                    {/* Secret PIN Input (Auth Opsi A: Sesi Persisten) */}
+                    <div className="mb-6">
+                        <label
+                            htmlFor="playerPin"
+                            className="block text-sm font-semibold text-gray-300 mb-2"
+                        >
+                            Secret PIN (min. 6 digit)
+                        </label>
+                        <input
+                            id="playerPin"
+                            type="password"
+                            value={pin}
+                            onChange={(e) => setPin(e.target.value)}
+                            placeholder="e.g. 123456"
+                            maxLength={32}
+                            disabled={actionLoading !== null}
+                            className="w-full bg-[#0b0f19] border border-gray-700 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-lg px-4 py-3 text-white placeholder-gray-500 text-sm outline-none transition disabled:opacity-50 tracking-widest font-mono"
+                        />
                         <p className="mt-1.5 text-xs text-gray-500">
-                            Visible to all players in the room (10 characters).
+                            Digunakan untuk mengunci & mereclaim kursimu bila browser ditutup atau berganti device.
                         </p>
                     </div>
 
