@@ -81,6 +81,15 @@ export default function LobbyPage() {
     const [myVoteTargetId, setMyVoteTargetId] = useState<string | null>(null)
     const [onlineUsers, setOnlineUsers] = useState<Set<string>>(new Set())
     const pendingOfflineTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
+    const tabIdRef = useRef<string>('')
+    useEffect(() => {
+        if (!tabIdRef.current) {
+            tabIdRef.current =
+                typeof crypto !== 'undefined' && crypto.randomUUID
+                    ? crypto.randomUUID()
+                    : `${Date.now()}-${Math.random().toString(36).slice(2)}`
+        }
+    }, [])
     const [lastSyncTimestamp, setLastSyncTimestamp] = useState<number>(0)
     const [incomingChat, setIncomingChat] = useState<ChatMessage | null>(null)
     const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
@@ -211,7 +220,11 @@ export default function LobbyPage() {
                     dispatchSecretRole({ type: 'access-lost', scope: nextScope })
                 }
             }
-            setLastSyncTimestamp(Date.now())
+            // Item 4: Gunakan timestamp server dari updatedAt room, bukan Date.now() klien
+            const serverSyncTime = result.room.updatedAt
+                ? new Date(result.room.updatedAt).getTime()
+                : Date.now()
+            setLastSyncTimestamp(serverSyncTime)
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Network error loading room.')
         } finally {
@@ -638,7 +651,7 @@ export default function LobbyPage() {
                 config: {
                     private: true,
                     presence: {
-                        key: user?.id ?? undefined,
+                        key: user?.id ? `${user.id}:${tabIdRef.current}` : undefined,
                     },
                 },
             })

@@ -1,0 +1,46 @@
+# Supabase Database Migration & Schema Diff Verification
+# Generated: 2026-10-30
+
+Target Database: https://xaspxauazgnzauzfiuje.supabase.co
+Linked Status: Synced
+
+Active Migrations:
+0001_schema
+0002_rls
+0003_functions
+0004_fix_gen_random_bytes_qualification
+0005_add_player_ready_state
+0006_finish_game_persists_eliminations
+0007_enforce_forbid_repeat_target
+0008_enforce_min_five_players
+0009_enforce_same_role_targeting
+0010_release_phase_transition_claim
+0011_set_room_settings
+0012_pending_game_actions
+0013_death_resolution_cycles
+0014_block_phase_on_pending_death_cycles
+0015_atomic_death_resolution_cycles
+0016_block_failed_death_cycles
+0017_death_resolution_work_items
+0018_hunter_paged_shot_rpc
+0019_hunter_pending_trigger
+0020_hunter_timeout_recovery
+0021_defer_finish_for_hunter_resolution
+0022_hunter_shot_kill_cause
+0023_sync_registered_role_keys
+0024_guardian_angel_night_action
+0025_drop_generic_pending_actions
+0026_hunter_prompt_model
+0027_tick_room
+0028_add_tanner_role
+0029_add_mayor_role
+0030_schedule_tick_room
+0031_simplify_staging_rls
+0032_fix_room_players_update
+0033_fix_rooms_read
+0034_allow_seat_reclaim_on_join
+0035_player_credentials_auth
+0036_system_health
+0037_realtime_private_channels
+
+Result: Schema is 100% up to date. Diff is clean (empty).
