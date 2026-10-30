@@ -20,6 +20,7 @@ export interface RoomChatPanelProps {
     isNight: boolean
     active?: boolean
     incomingMessage?: ChatMessage | null
+    refreshTrigger?: number
     onSendMessage?: (msg: ChatMessage) => void
 }
 
@@ -34,6 +35,7 @@ export function RoomChatPanel({
     isNight,
     active = false,
     incomingMessage,
+    refreshTrigger,
     onSendMessage,
 }: RoomChatPanelProps) {
     const [messages, setMessages] = useState<ChatMessage[]>([])
@@ -84,7 +86,7 @@ export function RoomChatPanel({
             mounted = false
             clearInterval(interval)
         }
-    }, [active, room.id, room.status, room.phase])
+    }, [active, room.id, room.status, room.phase, refreshTrigger])
 
     useEffect(() => {
         if (scrollRef.current) {

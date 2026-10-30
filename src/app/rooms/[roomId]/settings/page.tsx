@@ -55,7 +55,11 @@ export default function RoomSettingsPage() {
         if (!id || !supabase || authLoading || !user) return
 
         const channel = supabase
-            .channel(`room:${id}`)
+            .channel(`room:${id}`, {
+                config: {
+                    private: true,
+                },
+            })
             .on('broadcast', { event: 'room_updated' }, () => {
                 void fetchRoomSnapshot(id, { force: true }).then((result) => {
                     if (result.ok) setRoom(result.room)

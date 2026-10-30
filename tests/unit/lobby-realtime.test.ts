@@ -32,7 +32,7 @@ describe('Lobby Realtime Lifecycle: Broadcast and Presence', () => {
 
     // Simulate Broadcast + Presence subscription setup in Lobby component
     const channel = mockSupabase
-      .channel(`room:${roomId}`, { config: { presence: { key: 'user-1' } } })
+      .channel(`room:${roomId}`, { config: { private: true, presence: { key: 'user-1' } } })
       .on('broadcast', { event: 'room_updated' }, () => {})
       .on('presence', { event: 'sync' }, () => {})
       .subscribe((status: string) => {

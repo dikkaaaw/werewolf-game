@@ -52,11 +52,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, currentSession) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, currentSession) => {
       if (!mounted) return;
       setSession(currentSession);
       setUser(currentSession?.user ?? null);
       setLoading(false);
+      if ((event === 'TOKEN_REFRESHED' || event === 'SIGNED_IN') && currentSession?.access_token) {
+        supabase.realtime.setAuth(currentSession.access_token);
+      }
     });
 
     return () => {

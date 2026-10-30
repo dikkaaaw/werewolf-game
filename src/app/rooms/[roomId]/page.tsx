@@ -80,6 +80,8 @@ export default function LobbyPage() {
     } | null>(null)
     const [myVoteTargetId, setMyVoteTargetId] = useState<string | null>(null)
     const [onlineUsers, setOnlineUsers] = useState<Set<string>>(new Set())
+    const pendingOfflineTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
+    const [lastSyncTimestamp, setLastSyncTimestamp] = useState<number>(0)
     const [incomingChat, setIncomingChat] = useState<ChatMessage | null>(null)
     const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
     const [realtimeStatus, setRealtimeStatus] = useState<string>('DISCONNECTED')
@@ -209,6 +211,7 @@ export default function LobbyPage() {
                     dispatchSecretRole({ type: 'access-lost', scope: nextScope })
                 }
             }
+            setLastSyncTimestamp(Date.now())
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Network error loading room.')
         } finally {
@@ -615,9 +618,25 @@ export default function LobbyPage() {
     useEffect(() => {
         if (!roomId || !supabase || authLoading) return
 
+        let reconnectTimeout: ReturnType<typeof setTimeout> | null = null
+        let reconnectAttempts = 0
+
+        const triggerReconnect = () => {
+            if (reconnectTimeout) return
+            const delay = Math.min(30_000, 1000 * Math.pow(2, reconnectAttempts))
+            reconnectAttempts++
+            reconnectTimeout = setTimeout(() => {
+                reconnectTimeout = null
+                if (channelRef.current) {
+                    channelRef.current.subscribe()
+                }
+            }, delay)
+        }
+
         const channel = supabase
             .channel(`room:${roomId}`, {
                 config: {
+                    private: true,
                     presence: {
                         key: user?.id ?? undefined,
                     },
@@ -631,17 +650,53 @@ export default function LobbyPage() {
             })
             .on('presence', { event: 'sync' }, () => {
                 const state = channel.presenceState()
-                const ids = new Set<string>()
+                const activeIds = new Set<string>()
                 for (const presences of Object.values(state)) {
                     for (const p of presences as Array<{ userId?: string }>) {
-                        if (p.userId) ids.add(p.userId)
+                        if (p.userId) activeIds.add(p.userId)
                     }
                 }
-                setOnlineUsers(ids)
+
+                // Presence Tuning (Grace Period 5s):
+                // 1. Batalkan pending offline timer untuk user yang aktif kembali
+                for (const id of activeIds) {
+                    const timer = pendingOfflineTimers.current.get(id)
+                    if (timer) {
+                        clearTimeout(timer)
+                        pendingOfflineTimers.current.delete(id)
+                    }
+                }
+
+                setOnlineUsers((prev) => {
+                    const next = new Set(prev)
+                    // Masukkan semua user yang aktif
+                    for (const id of activeIds) next.add(id)
+
+                    // Jadwalkan grace period 5s untuk user yang menghilang dari heartbeat
+                    for (const existingId of prev) {
+                        if (!activeIds.has(existingId) && !pendingOfflineTimers.current.has(existingId)) {
+                            const offlineTimer = setTimeout(() => {
+                                setOnlineUsers((current) => {
+                                    const updated = new Set(current)
+                                    updated.delete(existingId)
+                                    return updated
+                                })
+                                pendingOfflineTimers.current.delete(existingId)
+                            }, 5000)
+                            pendingOfflineTimers.current.set(existingId, offlineTimer)
+                        }
+                    }
+                    return next
+                })
             })
             .subscribe(async (status) => {
                 setRealtimeStatus(status)
                 if (status === 'SUBSCRIBED') {
+                    reconnectAttempts = 0
+                    if (reconnectTimeout) {
+                        clearTimeout(reconnectTimeout)
+                        reconnectTimeout = null
+                    }
                     if (user?.id) {
                         await channel.track({
                             userId: user.id,
@@ -655,12 +710,24 @@ export default function LobbyPage() {
                         payload: { reason: 'presence_joined', timestamp: Date.now() },
                     })
                     requestRefresh({ force: true })
+                } else if (
+                    status === 'CHANNEL_ERROR' ||
+                    status === 'TIMED_OUT' ||
+                    status === 'CLOSED'
+                ) {
+                    triggerReconnect()
                 }
             })
 
         channelRef.current = channel
+        const currentOfflineTimers = pendingOfflineTimers.current
 
         return () => {
+            if (reconnectTimeout) clearTimeout(reconnectTimeout)
+            for (const timer of currentOfflineTimers.values()) {
+                clearTimeout(timer)
+            }
+            currentOfflineTimers.clear()
             channelRef.current = null
             supabase.removeChannel(channel)
         }
@@ -1053,6 +1120,7 @@ export default function LobbyPage() {
                                 isNight={room.phase === 'night'}
                                 active={true}
                                 incomingMessage={incomingChat}
+                                refreshTrigger={lastSyncTimestamp}
                                 onSendMessage={broadcastChatMessage}
                             />
                         </div>
