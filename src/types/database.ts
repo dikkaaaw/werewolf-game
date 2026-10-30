@@ -252,6 +252,14 @@ export interface Database {
       tick_room: { Args: { p_room_id: string }; Returns: Json };
       apply_hunter_final_shot: { Args: { p_room_id: string; p_user_id: string; p_target_player_id: string }; Returns: { ok: boolean } };
       expire_pending_hunter_final_shots: { Args: { p_room_id?: string | null }; Returns: { ok: boolean; expired: number } };
+      verify_player_credentials: {
+        Args: { p_nickname: string; p_pin: string };
+        Returns: Json;
+      };
+      register_player_credentials: {
+        Args: { p_user_id: string; p_nickname: string; p_pin: string };
+        Returns: Json;
+      };
     };
     Enums: {
       player_alignment: PlayerAlignment;

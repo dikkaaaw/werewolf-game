@@ -43,8 +43,8 @@ function HomeContent() {
 
     const validatePin = (p: string): string | null => {
         const trimmed = p.trim()
-        if (trimmed.length < 6) return 'PIN must be at least 6 digits/characters to secure your seat.'
-        if (trimmed.length > 32) return 'PIN is too long (max 32 characters).'
+        if (trimmed.length < 8) return 'PIN / Passphrase minimal 8 karakter alfanumerik.'
+        if (trimmed.length > 64) return 'PIN / Passphrase terlalu panjang (maks 64 karakter).'
         return null
     }
 
@@ -241,21 +241,21 @@ function HomeContent() {
                         />
                     </div>
 
-                    {/* Secret PIN Input (Auth Opsi A: Sesi Persisten) */}
+                    {/* Secret PIN / Passphrase Input (Auth Opsi A: Sesi Persisten) */}
                     <div className="mb-6">
                         <label
                             htmlFor="playerPin"
                             className="block text-sm font-semibold text-gray-300 mb-2"
                         >
-                            Secret PIN (min. 6 digit)
+                            PIN / Passphrase (min. 8 karakter)
                         </label>
                         <input
                             id="playerPin"
                             type="password"
                             value={pin}
                             onChange={(e) => setPin(e.target.value)}
-                            placeholder="e.g. 123456"
-                            maxLength={32}
+                            placeholder="e.g. secret123 / hunter wolf red"
+                            maxLength={64}
                             disabled={actionLoading !== null}
                             className="w-full bg-[#0b0f19] border border-gray-700 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-lg px-4 py-3 text-white placeholder-gray-500 text-sm outline-none transition disabled:opacity-50 tracking-widest font-mono"
                         />
