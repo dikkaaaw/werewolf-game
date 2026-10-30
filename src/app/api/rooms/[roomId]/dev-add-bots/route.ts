@@ -24,7 +24,10 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ roomId: string }> },
 ) {
-  if (process.env.NODE_ENV !== 'development') {
+  if (
+    process.env.NODE_ENV !== 'development' &&
+    process.env.NEXT_PUBLIC_ALLOW_TEST_BOTS !== 'true'
+  ) {
     return notFound();
   }
 

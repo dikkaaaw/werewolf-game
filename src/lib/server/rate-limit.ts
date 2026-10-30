@@ -41,6 +41,14 @@ export async function checkRateLimit(
   bucket: RateLimitBucket,
   identifier: string,
 ): Promise<RateLimitResult> {
+  if (process.env.DISABLE_RATE_LIMIT === 'true') {
+    return {
+      allowed: true,
+      remaining: 999,
+      resetAt: new Date(Date.now() + 3600_000).toISOString(),
+    };
+  }
+
   const { limit, windowSeconds } = SETTINGS.rateLimits[bucket];
   const admin = createAdminClient();
 

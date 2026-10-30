@@ -254,7 +254,9 @@ export function LobbyPanel({
                             : `The game unlocks once at least ${MIN_STARTABLE} players have joined and everyone is ready.`}
                     </p>
 
-                    {process.env.NODE_ENV === 'development' && isHost && (
+                    {(process.env.NODE_ENV === 'development' ||
+                        process.env.NEXT_PUBLIC_ALLOW_TEST_BOTS === 'true') &&
+                        isHost && (
                         <div
                             className={`flex items-center justify-between gap-2 border-t border-dashed pt-3 ${theme.divider}`}
                         >
