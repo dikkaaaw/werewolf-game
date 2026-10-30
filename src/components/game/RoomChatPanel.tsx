@@ -19,18 +19,38 @@ export interface RoomChatPanelProps {
     isSelfAlive: boolean
     isNight: boolean
     active?: boolean
+    incomingMessage?: ChatMessage | null
+    onSendMessage?: (msg: ChatMessage) => void
 }
 
 /**
  * Interactive room chat box for village discussion during day/voting phases.
  * When `active` is false, it maintains the static preview matching test scaffolding.
  */
-export function RoomChatPanel({ theme, room, isSelfAlive, isNight, active = false }: RoomChatPanelProps) {
+export function RoomChatPanel({
+    theme,
+    room,
+    isSelfAlive,
+    isNight,
+    active = false,
+    incomingMessage,
+    onSendMessage,
+}: RoomChatPanelProps) {
     const [messages, setMessages] = useState<ChatMessage[]>([])
     const [draft, setDraft] = useState('')
     const [sending, setSending] = useState(false)
     const [error, setError] = useState<string | null>(null)
     const scrollRef = useRef<HTMLDivElement>(null)
+
+    // Append incoming broadcast messages instantly
+    useEffect(() => {
+        if (!incomingMessage) return
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setMessages((prev) => {
+            if (prev.some((m) => m.id === incomingMessage.id)) return prev
+            return [...prev, incomingMessage]
+        })
+    }, [incomingMessage])
 
     const unavailableReason = !isSelfAlive
         ? 'Eliminated players cannot use room chat.'
@@ -94,6 +114,7 @@ export function RoomChatPanel({ theme, room, isSelfAlive, isNight, active = fals
                 const data = await res.json()
                 if (data?.message) {
                     setMessages((prev) => [...prev, data.message])
+                    onSendMessage?.(data.message)
                 }
             }
         } catch {

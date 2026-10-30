@@ -7,7 +7,7 @@ import { useAuth } from '@/components/auth/AuthProvider'
 import { GameOverPanel } from '@/components/game/GameOverPanel'
 import { LobbyPanel } from '@/components/game/LobbyPanel'
 import { PlayerRoster } from '@/components/game/PlayerRoster'
-import { RoomChatPanel } from '@/components/game/RoomChatPanel'
+import { RoomChatPanel, type ChatMessage } from '@/components/game/RoomChatPanel'
 import { VillageTimeline } from '@/components/game/VillageTimeline'
 import { PhaseShell } from '@/components/game/PhaseShell'
 import {
@@ -80,6 +80,7 @@ export default function LobbyPage() {
     } | null>(null)
     const [myVoteTargetId, setMyVoteTargetId] = useState<string | null>(null)
     const [onlineUsers, setOnlineUsers] = useState<Set<string>>(new Set())
+    const [incomingChat, setIncomingChat] = useState<ChatMessage | null>(null)
     const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
     const [realtimeStatus, setRealtimeStatus] = useState<string>('DISCONNECTED')
     const toasts = useToasts()
@@ -217,13 +218,36 @@ export default function LobbyPage() {
 
     const broadcastUpdate = useCallback((reason: string) => {
         if (channelRef.current) {
+            const start = Date.now()
             channelRef.current.send({
                 type: 'broadcast',
                 event: 'room_updated',
-                payload: { reason, timestamp: Date.now() },
+                payload: { reason, timestamp: start },
+            }).then((resp) => {
+                const latencyMs = Date.now() - start
+                const isOk = resp === 'ok'
+                console.log(`[broadcast] ${JSON.stringify({ roomId, event: 'room_updated', reason, latencyMs, status: isOk ? 'ok' : 'fail' })}`)
+            }).catch(() => {
+                console.warn(`[broadcast] ${JSON.stringify({ roomId, event: 'room_updated', reason, status: 'fail' })}`)
             })
         }
-    }, [])
+    }, [roomId])
+
+    const broadcastChatMessage = useCallback((msg: ChatMessage) => {
+        if (channelRef.current) {
+            const start = Date.now()
+            channelRef.current.send({
+                type: 'broadcast',
+                event: 'chat_message',
+                payload: msg,
+            }).then((resp) => {
+                const latencyMs = Date.now() - start
+                console.log(`[broadcast] ${JSON.stringify({ roomId, event: 'chat_message', latencyMs, status: resp === 'ok' ? 'ok' : 'fail' })}`)
+            }).catch(() => {
+                console.warn(`[broadcast] ${JSON.stringify({ roomId, event: 'chat_message', status: 'fail' })}`)
+            })
+        }
+    }, [roomId])
 
     const [hunterSubmitting, setHunterSubmitting] = useState(false)
     const handleHunterShot = async (targetPlayerId: string) => {
@@ -572,6 +596,22 @@ export default function LobbyPage() {
         return () => clearInterval(pollInterval)
     }, [isPlayingNow, requestRefresh])
 
+    // Skenario h, g, i: saat tab aktif kembali setelah disembunyikan atau koneksi online pulih,
+    // langsung sinkronkan snapshot room tanpa menunggu polling interval berikutnya.
+    useEffect(() => {
+        const handleSyncOnWake = () => {
+            if (document.visibilityState === 'visible') {
+                requestRefresh({ force: true })
+            }
+        }
+        document.addEventListener('visibilitychange', handleSyncOnWake)
+        window.addEventListener('online', handleSyncOnWake)
+        return () => {
+            document.removeEventListener('visibilitychange', handleSyncOnWake)
+            window.removeEventListener('online', handleSyncOnWake)
+        }
+    }, [requestRefresh])
+
     useEffect(() => {
         if (!roomId || !supabase || authLoading) return
 
@@ -585,6 +625,9 @@ export default function LobbyPage() {
             })
             .on('broadcast', { event: 'room_updated' }, () => {
                 requestRefresh({ force: true })
+            })
+            .on('broadcast', { event: 'chat_message' }, ({ payload }) => {
+                if (payload) setIncomingChat(payload as ChatMessage)
             })
             .on('presence', { event: 'sync' }, () => {
                 const state = channel.presenceState()
@@ -1009,6 +1052,8 @@ export default function LobbyPage() {
                                 isSelfAlive={myPlayer?.isAlive ?? false}
                                 isNight={room.phase === 'night'}
                                 active={true}
+                                incomingMessage={incomingChat}
+                                onSendMessage={broadcastChatMessage}
                             />
                         </div>
                     </div>

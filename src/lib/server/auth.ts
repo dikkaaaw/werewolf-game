@@ -2,6 +2,8 @@ import 'server-only';
 
 import { createServerClient } from '@/lib/supabase/server';
 
+import { logRls } from '@/lib/server/logger';
+
 export interface AuthenticatedUser {
   userId: string;
   email: string | null;
@@ -48,7 +50,17 @@ export async function requireRoomAccess(
     .eq('id', roomId)
     .single();
 
-  return !error && data !== null;
+  const allowed = !error && data !== null;
+  if (!allowed) {
+    logRls({
+      table: 'rooms',
+      operation: 'SELECT',
+      roomId,
+      reason: error ? error.message : 'Non-member or nonexistent room blocked by RLS',
+    });
+  }
+
+  return allowed;
 }
 
 /**

@@ -2,6 +2,8 @@ import 'server-only';
 
 import { createAdminClient } from '@/lib/supabase/server';
 
+import { logPhase } from '@/lib/server/logger';
+
 /**
  * Lazy phase advancement fallback.
  *
@@ -11,17 +13,50 @@ import { createAdminClient } from '@/lib/supabase/server';
  */
 export async function advanceRoomPhaseIfExpired(roomId: string): Promise<boolean> {
   const admin = createAdminClient();
+  const startTime = Date.now();
 
   try {
     const { data, error } = await admin.rpc('tick_room', { p_room_id: roomId });
+    const durationMs = Date.now() - startTime;
+
     if (error) {
       console.error('[advanceRoomPhase] RPC error:', error);
+      logPhase({
+        roomId,
+        durationMs,
+        advanced: false,
+        reason: error.message,
+      });
       return false;
     }
-    const body = data as { ok?: boolean; advanced?: boolean } | null;
-    return Boolean(body?.ok && body?.advanced);
+
+    const body = data as {
+      ok?: boolean;
+      advanced?: boolean;
+      nextPhase?: string;
+      roundNumber?: number;
+      reason?: string;
+    } | null;
+
+    const advanced = Boolean(body?.ok && body?.advanced);
+    logPhase({
+      roomId,
+      toPhase: body?.nextPhase,
+      roundNumber: body?.roundNumber,
+      durationMs,
+      advanced,
+      reason: body?.reason,
+    });
+
+    return advanced;
   } catch (err) {
     console.error('[advanceRoomPhase] error calling tick_room:', err);
+    logPhase({
+      roomId,
+      durationMs: Date.now() - startTime,
+      advanced: false,
+      reason: err instanceof Error ? err.message : 'Unknown exception',
+    });
     return false;
   }
 }

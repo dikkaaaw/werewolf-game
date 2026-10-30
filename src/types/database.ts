@@ -260,6 +260,10 @@ export interface Database {
         Args: { p_user_id: string; p_nickname: string; p_pin: string };
         Returns: Json;
       };
+      get_system_health: {
+        Args: Record<string, never>;
+        Returns: Json;
+      };
     };
     Enums: {
       player_alignment: PlayerAlignment;
