@@ -26,7 +26,7 @@ export async function POST(
 ) {
   if (
     process.env.NODE_ENV !== 'development' &&
-    process.env.NEXT_PUBLIC_ALLOW_TEST_BOTS !== 'true'
+    process.env.ALLOW_TEST_BOTS !== 'true'
   ) {
     return notFound();
   }
